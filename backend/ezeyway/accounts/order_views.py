@@ -193,23 +193,37 @@ def update_order_status_api(request, order_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def create_review_api(request, order_id):
-    """Create a review for a delivered order"""
+    """Create or update a review for a delivered order"""
     try:
         order = Order.objects.get(id=order_id, customer=request.user)
         
-        if not order.can_be_reviewed:
+        # Check if order is delivered
+        if order.status != 'delivered':
             return Response({
-                'error': 'Order cannot be reviewed'
+                'error': 'Order must be delivered to be reviewed'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        serializer = OrderReviewSerializer(data=request.data)
-        if serializer.is_valid():
-            review = serializer.save(order=order, customer=request.user)
-            
-            return Response({
-                'message': 'Review created successfully',
-                'review': OrderReviewSerializer(review).data
-            }, status=status.HTTP_201_CREATED)
+        # Check if review already exists
+        existing_review = getattr(order, 'review', None)
+        
+        if existing_review:
+            # Update existing review
+            serializer = OrderReviewSerializer(existing_review, data=request.data, partial=True)
+            if serializer.is_valid():
+                review = serializer.save()
+                return Response({
+                    'message': 'Review updated successfully',
+                    'review': OrderReviewSerializer(review).data
+                })
+        else:
+            # Create new review
+            serializer = OrderReviewSerializer(data=request.data)
+            if serializer.is_valid():
+                review = serializer.save(order=order, customer=request.user)
+                return Response({
+                    'message': 'Review created successfully',
+                    'review': OrderReviewSerializer(review).data
+                }, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
