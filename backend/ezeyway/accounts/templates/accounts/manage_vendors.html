@@ -164,7 +164,7 @@
         // View Vendor Details
         function viewVendorDetails(vendorId) {
             currentVendorId = vendorId;
-            fetch(`/api/accounts/vendor-profiles/${vendorId}/`, {
+            fetch(`/api/vendor-profiles/${vendorId}/`, {
                 method: 'GET',
                 headers: {
                     'Authorization': 'Token {{ auth_token }}',
