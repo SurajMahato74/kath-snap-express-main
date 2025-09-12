@@ -18,7 +18,7 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             # Superusers don't need email verification
-            if not user.email_verified and not user.is_superadmin:
+            if not user.email_verified and not user.is_superuser:
                 messages.warning(request, 'Please verify your email before logging in.')
                 return redirect('verify_email_prompt', user_id=user.id)
             
