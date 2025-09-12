@@ -336,7 +336,7 @@
         document.getElementById('confirmApproveBtn').addEventListener('click', function() {
             if (!currentVendorId) return;
 
-            fetch(`/api/accounts/admin/vendors/${currentVendorId}/approve/`, {
+            fetch(`/api/admin/vendors/${currentVendorId}/approve/`, {
                 method: 'POST',
                 headers: {
                     'Authorization': 'Token {{ auth_token }}',
@@ -370,7 +370,7 @@
                 return;
             }
 
-            fetch(`/api/accounts/admin/vendors/${currentVendorId}/reject/`, {
+            fetch(`/api/admin/vendors/${currentVendorId}/reject/`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': 'Token {{ auth_token }}',

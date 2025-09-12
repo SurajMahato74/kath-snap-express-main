@@ -524,7 +524,7 @@ class VendorDocumentListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if self.request.user.is_superadmin:
+        if self.request.user.is_superuser:
             return VendorDocument.objects.all()
         return VendorDocument.objects.filter(vendor_profile__user=self.request.user)
 
@@ -543,7 +543,7 @@ class VendorDocumentListCreateView(generics.ListCreateAPIView):
 def vendor_toggle_status_api(request, pk):
     try:
         # Get the vendor profile
-        if request.user.is_superadmin:
+        if request.user.is_superuser:
             vendor_profile = VendorProfile.objects.get(id=pk)
         else:
             vendor_profile = VendorProfile.objects.get(id=pk, user=request.user)
@@ -575,7 +575,7 @@ def vendor_toggle_status_api(request, pk):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_dashboard_api(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     total_users = CustomUser.objects.count()
@@ -596,14 +596,14 @@ class UserListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        if not self.request.user.is_superadmin:
+        if not self.request.user.is_superuser:
             return CustomUser.objects.none()
         return CustomUser.objects.all().order_by('-date_joined')
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_stats_api(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     total_users = CustomUser.objects.count()
@@ -630,7 +630,7 @@ def admin_stats_api(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_create_user_api(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     serializer = AdminUserCreateSerializer(data=request.data)
@@ -646,7 +646,7 @@ def admin_create_user_api(request):
 @api_view(['PUT'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_update_user_api(request, user_id):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
@@ -667,12 +667,12 @@ def admin_update_user_api(request, user_id):
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_delete_user_api(request, user_id):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
         user = CustomUser.objects.get(id=user_id)
-        if user.is_superadmin and CustomUser.objects.filter(user_type='superuser').count() <= 1:
+        if user.is_superuser and CustomUser.objects.filter(user_type='superuser').count() <= 1:
             return Response({'error': 'Cannot delete the last superuser'}, status=status.HTTP_400_BAD_REQUEST)
         
         username = user.username
@@ -684,7 +684,7 @@ def admin_delete_user_api(request, user_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_toggle_user_status_api(request, user_id):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
@@ -703,7 +703,7 @@ def admin_toggle_user_status_api(request, user_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_approve_vendor_api(request, vendor_id):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
@@ -722,7 +722,7 @@ def admin_approve_vendor_api(request, vendor_id):
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_reject_vendor_api(request, vendor_id):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
@@ -746,7 +746,7 @@ class ProductListCreateView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
-        if self.request.user.is_superadmin:
+        if self.request.user.is_superuser:
             return Product.objects.all()
         try:
             vendor_profile = VendorProfile.objects.get(user=self.request.user)
@@ -767,7 +767,7 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
-        if self.request.user.is_superadmin:
+        if self.request.user.is_superuser:
             return Product.objects.all()
         try:
             vendor_profile = VendorProfile.objects.get(user=self.request.user)
@@ -779,7 +779,7 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def delete_product_image(request, product_id, image_id):
     try:
-        if request.user.is_superadmin:
+        if request.user.is_superuser:
             product = Product.objects.get(id=product_id)
         else:
             vendor_profile = VendorProfile.objects.get(user=request.user)
@@ -796,7 +796,7 @@ def delete_product_image(request, product_id, image_id):
 @permission_classes([permissions.IsAuthenticated])
 def set_primary_image(request, product_id, image_id):
     try:
-        if request.user.is_superadmin:
+        if request.user.is_superuser:
             product = Product.objects.get(id=product_id)
         else:
             vendor_profile = VendorProfile.objects.get(user=request.user)
