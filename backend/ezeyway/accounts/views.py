@@ -40,7 +40,7 @@ def logout_view(request):
 
 @login_required
 def superadmin_dashboard(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         messages.error(request, 'Access denied. Superadmin privileges required.')
         return redirect('login')
     
@@ -63,7 +63,7 @@ def superadmin_dashboard(request):
 
 @login_required
 def manage_users(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         messages.error(request, 'Access denied.')
         return redirect('login')
     
@@ -72,7 +72,7 @@ def manage_users(request):
 
 @login_required
 def manage_vendors(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         messages.error(request, 'Access denied.')
         return redirect('login')
 
@@ -253,7 +253,7 @@ def verify_otp(request):
 
 @login_required
 def manage_commission_ranges(request):
-    if not request.user.is_superadmin:
+    if not request.user.is_superuser:
         messages.error(request, 'Access denied.')
         return redirect('login')
     
