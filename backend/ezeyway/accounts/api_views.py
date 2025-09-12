@@ -714,7 +714,7 @@ def admin_approve_vendor_api(request, vendor_id):
         
         return Response({
             'message': f'Vendor {vendor_profile.business_name} approved successfully',
-            'vendor': VendorProfileSerializer(vendor_profile).data
+            'vendor': VendorProfileSerializer(vendor_profile, context={'request': request}).data
         })
     except VendorProfile.DoesNotExist:
         return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)

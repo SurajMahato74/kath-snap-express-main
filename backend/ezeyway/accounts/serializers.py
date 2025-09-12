@@ -152,7 +152,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         docs = obj.additional_docs.all()
         return [{
             'id': doc.id,
-            'document': request.build_absolute_uri(f'/media/{doc.document}') if doc.document else None,
+            'document': request.build_absolute_uri(f'/media/{doc.document}') if doc.document and request else f'/media/{doc.document}' if doc.document else None,
             'uploaded_at': doc.uploaded_at
         } for doc in docs]
 
@@ -160,7 +160,9 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         profile_picture_url = None
         if obj.user.profile_picture:
-            if 'ngrok-free.app' in request.get_host():
+            if not request:
+                profile_picture_url = f'/media/{obj.user.profile_picture}'
+            elif 'ngrok-free.app' in request.get_host():
                 profile_picture_url = f'https://{request.get_host()}/media/{obj.user.profile_picture}'
             else:
                 profile_picture_url = request.build_absolute_uri(f'/media/{obj.user.profile_picture}')
@@ -179,21 +181,35 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not obj.business_license_file:
             return None
+        if not request:
+            return f'/media/{obj.business_license_file}'
         if 'ngrok-free.app' in request.get_host():
             return f'https://{request.get_host()}/media/{obj.business_license_file}'
         return request.build_absolute_uri(f'/media/{obj.business_license_file}')
 
     def get_gst_certificate_url(self, obj):
         request = self.context.get('request')
-        return request.build_absolute_uri(f'/media/{obj.gst_certificate}') if obj.gst_certificate else None
+        if not obj.gst_certificate:
+            return None
+        if not request:
+            return f'/media/{obj.gst_certificate}'
+        return request.build_absolute_uri(f'/media/{obj.gst_certificate}')
 
     def get_fssai_license_url(self, obj):
         request = self.context.get('request')
-        return request.build_absolute_uri(f'/media/{obj.fssai_license}') if obj.fssai_license else None
+        if not obj.fssai_license:
+            return None
+        if not request:
+            return f'/media/{obj.fssai_license}'
+        return request.build_absolute_uri(f'/media/{obj.fssai_license}')
 
     def get_bank_document_url(self, obj):
         request = self.context.get('request')
-        return request.build_absolute_uri(f'/media/{obj.bank_document}') if obj.bank_document else None
+        if not obj.bank_document:
+            return None
+        if not request:
+            return f'/media/{obj.bank_document}'
+        return request.build_absolute_uri(f'/media/{obj.bank_document}')
 
     def get_is_active(self, obj):
         # If status is overridden and the override is for today, return the stored is_active
