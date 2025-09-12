@@ -493,7 +493,7 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
-        if self.request.user.is_superadmin:
+        if self.request.user.is_superuser:
             return VendorProfile.objects.all()
         return VendorProfile.objects.filter(user=self.request.user)
 
@@ -513,7 +513,7 @@ class VendorProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
-        if self.request.user.is_superadmin:
+        if self.request.user.is_superuser:
             return VendorProfile.objects.all()
         return VendorProfile.objects.filter(user=self.request.user)
     
