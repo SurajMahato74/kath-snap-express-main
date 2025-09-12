@@ -952,8 +952,8 @@ class CustomerProductSearchView(generics.ListAPIView):
     pagination_class = SearchPagination
     
     def get_queryset(self):
-        print("\n🔍 PRODUCT SEARCH DEBUG - Starting query")
-        print(f"📋 Query params: {dict(self.request.query_params)}")
+        print("\nPRODUCT SEARCH DEBUG - Starting query")
+        print(f"Query params: {dict(self.request.query_params)}")
         
         # Get current time and day for vendor availability check
         current_time = timezone.now().time()
@@ -989,12 +989,12 @@ class CustomerProductSearchView(generics.ListAPIView):
         queryset = queryset.filter(id__in=online_vendors)
         
         initial_count = queryset.count()
-        print(f"📦 Initial products (active, approved, online vendors): {initial_count}")
+        print(f"Initial products (active, approved, online vendors): {initial_count}")
         
         # Search query
         search = self.request.query_params.get('search', '')
         if search:
-            print(f"🔎 Applying search filter: '{search}'")
+            print(f"Applying search filter: '{search}'")
             queryset = queryset.filter(
                 Q(name__icontains=search) |
                 Q(description__icontains=search) |
@@ -1004,7 +1004,7 @@ class CustomerProductSearchView(generics.ListAPIView):
                 Q(vendor__business_name__icontains=search)
             )
             search_count = queryset.count()
-            print(f"📦 After search filter: {search_count} products")
+            print(f"After search filter: {search_count} products")
         
         # Location-based filtering
         user_lat = self.request.query_params.get('latitude')
@@ -1014,7 +1014,7 @@ class CustomerProductSearchView(generics.ListAPIView):
             try:
                 user_lat = float(user_lat)
                 user_lon = float(user_lon)
-                print(f"📍 User location: ({user_lat}, {user_lon})")
+                print(f"User location: ({user_lat}, {user_lon})")
                 
                 # Filter products by vendor delivery radius
                 filtered_products = []
@@ -1030,27 +1030,27 @@ class CustomerProductSearchView(generics.ListAPIView):
                             user_lat, user_lon,
                             vendor.latitude, vendor.longitude
                         )
-                        print(f"🏪 Vendor '{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
+                        print(f"Vendor '{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
                         
                         if distance <= vendor.delivery_radius:
                             filtered_products.append(product.id)
                             within_radius += 1
-                            print(f"  ✅ INCLUDED: Product '{product.name}'")
+                            print(f"  INCLUDED: Product '{product.name}'")
                         else:
-                            print(f"  ❌ EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
+                            print(f"  EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
                     else:
-                        print(f"🏪 Vendor '{vendor.business_name}': Missing location/radius data")
+                        print(f"Vendor '{vendor.business_name}': Missing location/radius data")
                 
-                print(f"📊 Location filtering: {within_radius}/{total_checked} products within delivery radius")
+                print(f"Location filtering: {within_radius}/{total_checked} products within delivery radius")
                 queryset = queryset.filter(id__in=filtered_products)
             except (ValueError, TypeError) as e:
-                print(f"❌ Location parsing error: {e}")
+                print(f"Location parsing error: {e}")
         else:
-            print("📍 No user location provided - skipping distance filtering")
+            print("No user location provided - skipping distance filtering")
         
         final_count = queryset.count()
-        print(f"📦 Final result: {final_count} products")
-        print("🔍 PRODUCT SEARCH DEBUG - Complete\n")
+        print(f"Final result: {final_count} products")
+        print("PRODUCT SEARCH DEBUG - Complete\n")
         
         return queryset.order_by('-created_at')
 
@@ -1060,8 +1060,8 @@ class CustomerVendorSearchView(generics.ListAPIView):
     pagination_class = SearchPagination
     
     def get_queryset(self):
-        print("\n🏪 VENDOR SEARCH DEBUG - Starting query")
-        print(f"📋 Query params: {dict(self.request.query_params)}")
+        print("\nVENDOR SEARCH DEBUG - Starting query")
+        print(f"Query params: {dict(self.request.query_params)}")
         
         # Get current time and day for vendor availability check
         current_time = timezone.now().time()
@@ -1092,12 +1092,12 @@ class CustomerVendorSearchView(generics.ListAPIView):
         queryset = queryset.filter(id__in=online_vendors)
         
         initial_count = queryset.count()
-        print(f"🏪 Initial vendors (approved & online): {initial_count}")
+        print(f"Initial vendors (approved & online): {initial_count}")
         
         # Search query
         search = self.request.query_params.get('search', '')
         if search:
-            print(f"🔎 Applying search filter: '{search}'")
+            print(f"Applying search filter: '{search}'")
             queryset = queryset.filter(
                 Q(business_name__icontains=search) |
                 Q(description__icontains=search) |
@@ -1105,7 +1105,7 @@ class CustomerVendorSearchView(generics.ListAPIView):
                 Q(categories__icontains=search)
             )
             search_count = queryset.count()
-            print(f"🏪 After search filter: {search_count} vendors")
+            print(f"After search filter: {search_count} vendors")
         
         # Location-based filtering
         user_lat = self.request.query_params.get('latitude')
@@ -1115,7 +1115,7 @@ class CustomerVendorSearchView(generics.ListAPIView):
             try:
                 user_lat = float(user_lat)
                 user_lon = float(user_lon)
-                print(f"📍 User location: ({user_lat}, {user_lon})")
+                print(f"User location: ({user_lat}, {user_lon})")
                 
                 # Filter vendors by delivery radius
                 filtered_vendors = []
@@ -1130,27 +1130,27 @@ class CustomerVendorSearchView(generics.ListAPIView):
                             user_lat, user_lon,
                             vendor.latitude, vendor.longitude
                         )
-                        print(f"🏪 '{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
+                        print(f"'{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
                         
                         if distance <= vendor.delivery_radius:
                             filtered_vendors.append(vendor.id)
                             within_radius += 1
-                            print(f"  ✅ INCLUDED: Within delivery range")
+                            print(f"  INCLUDED: Within delivery range")
                         else:
-                            print(f"  ❌ EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
+                            print(f"  EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
                     else:
-                        print(f"🏪 '{vendor.business_name}': Missing location/radius data")
+                        print(f"'{vendor.business_name}': Missing location/radius data")
                 
-                print(f"📊 Location filtering: {within_radius}/{total_checked} vendors within delivery radius")
+                print(f"Location filtering: {within_radius}/{total_checked} vendors within delivery radius")
                 queryset = queryset.filter(id__in=filtered_vendors)
             except (ValueError, TypeError) as e:
-                print(f"❌ Location parsing error: {e}")
+                print(f"Location parsing error: {e}")
         else:
-            print("📍 No user location provided - skipping distance filtering")
+            print("No user location provided - skipping distance filtering")
         
         final_count = queryset.count()
-        print(f"🏪 Final result: {final_count} vendors")
-        print("🏪 VENDOR SEARCH DEBUG - Complete\n")
+        print(f"Final result: {final_count} vendors")
+        print("VENDOR SEARCH DEBUG - Complete\n")
         
         return queryset.order_by('business_name')
 
