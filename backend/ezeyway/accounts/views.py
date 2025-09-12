@@ -23,12 +23,12 @@ def login_view(request):
                 return redirect('verify_email_prompt', user_id=user.id)
             
             login(request, user)
-            if user.is_superadmin:
+            if user.is_superuser:
                 return redirect('superadmin_dashboard')
             elif user.is_vendor:
-                return redirect('vendor_dashboard')
+                return redirect('vendor_wallet')
             else:
-                return redirect('customer_dashboard')
+                return redirect('superadmin_dashboard')
         else:
             messages.error(request, 'Invalid username/email or password')
     
