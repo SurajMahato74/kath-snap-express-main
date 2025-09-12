@@ -1,0 +1,36 @@
+from django.urls import path
+from . import order_views, customer_order_views
+
+urlpatterns = [
+    # Customer Order URLs
+    path('orders/', order_views.CustomerOrderListView.as_view(), name='customer_orders'),
+    path('orders/<int:pk>/', order_views.CustomerOrderDetailView.as_view(), name='customer_order_detail'),
+    path('orders/create/', order_views.create_order_api, name='create_order'),
+    path('orders/<int:order_id>/cancel/', order_views.cancel_order_api, name='cancel_order'),
+    path('orders/<int:order_id>/status/', customer_order_views.customer_update_order_status_api, name='customer_update_order_status'),
+    
+    # Vendor Order URLs
+    path('vendor/orders/', order_views.VendorOrderListView.as_view(), name='vendor_orders'),
+    path('vendor/orders/<int:order_id>/status/', order_views.update_order_status_api, name='update_order_status'),
+    path('orders/vendor/pending/', order_views.vendor_pending_orders_api, name='vendor_pending_orders'),
+    path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='vendor_accept_order'),
+    path('orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='vendor_reject_order'),
+    
+    # Review URLs
+    path('orders/<int:order_id>/review/', order_views.create_review_api, name='create_review'),
+    
+    # Refund URLs
+    path('orders/<int:order_id>/refund/', order_views.request_refund_api, name='request_refund'),
+    path('orders/<int:order_id>/return/', order_views.request_return_api, name='request_return'),
+    path('refunds/<int:refund_id>/appeal/', order_views.appeal_refund_api, name='appeal_refund'),
+    path('refunds/<int:refund_id>/upload-document/', order_views.upload_refund_document_api, name='upload_refund_document'),
+    
+    # Admin Order URLs
+    path('admin/orders/', order_views.AdminOrderListView.as_view(), name='admin_orders'),
+    path('admin/orders/stats/', order_views.admin_order_stats_api, name='admin_order_stats'),
+    path('admin/refunds/<int:refund_id>/process/', order_views.admin_process_refund_api, name='admin_process_refund'),
+    
+    # Delivery URLs
+    path('delivery/riders/', order_views.DeliveryRiderListView.as_view(), name='delivery_riders'),
+    path('delivery/<int:delivery_id>/location/', order_views.update_delivery_location_api, name='update_delivery_location'),
+]

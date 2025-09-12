@@ -1,0 +1,276 @@
+from rest_framework import status, generics, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from django.db.models import Q, Prefetch
+from django.shortcuts import get_object_or_404
+from django.core.files.storage import default_storage
+from django.utils import timezone
+import os
+from .models import CustomUser
+from .message_models import Conversation, Message, MessageRead, Call
+from .message_serializers import (
+    ConversationSerializer, MessageSerializer, CallSerializer,
+    SendMessageSerializer, InitiateCallSerializer
+)
+
+class ConversationListView(generics.ListAPIView):
+    serializer_class = ConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Conversation.objects.filter(
+            participants=self.request.user
+        ).prefetch_related(
+            'participants',
+            'messages'
+        )
+
+class ConversationDetailView(generics.RetrieveAPIView):
+    serializer_class = ConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Conversation.objects.filter(participants=self.request.user)
+
+class MessageListView(generics.ListAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        conversation_id = self.kwargs['conversation_id']
+        conversation = get_object_or_404(
+            Conversation.objects.filter(participants=self.request.user),
+            id=conversation_id
+        )
+        
+        # Mark messages as read
+        unread_messages = Message.objects.filter(
+            conversation=conversation
+        ).exclude(sender=self.request.user).exclude(
+            read_by__user=self.request.user
+        )
+        
+        for message in unread_messages:
+            MessageRead.objects.get_or_create(message=message, user=self.request.user)
+        
+        return Message.objects.filter(conversation=conversation).order_by('-created_at')
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def send_message_api(request):
+    serializer = SendMessageSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    data = serializer.validated_data
+    
+    # Get or create conversation
+    if data.get('conversation_id'):
+        conversation = get_object_or_404(
+            Conversation.objects.filter(participants=request.user),
+            id=data['conversation_id']
+        )
+    else:
+        recipient = get_object_or_404(CustomUser, id=data['recipient_id'])
+        
+        # Check if conversation already exists
+        conversation = Conversation.objects.filter(
+            participants=request.user
+        ).filter(participants=recipient).first()
+        
+        if not conversation:
+            conversation = Conversation.objects.create()
+            conversation.participants.add(request.user, recipient)
+    
+    # Handle file upload
+    file_url = None
+    file_name = None
+    if data.get('file'):
+        uploaded_file = data['file']
+        file_extension = os.path.splitext(uploaded_file.name)[1]
+        filename = f"messages/{conversation.id}_{request.user.id}_{uploaded_file.name}"
+        file_path = default_storage.save(filename, uploaded_file)
+        file_url = file_path
+        file_name = uploaded_file.name
+    
+    # Create message
+    message = Message.objects.create(
+        conversation=conversation,
+        sender=request.user,
+        message_type=data['message_type'],
+        content=data.get('content', ''),
+        file_url=file_url,
+        file_name=file_name
+    )
+    
+    # Mark as read by sender
+    MessageRead.objects.create(message=message, user=request.user)
+    
+    # Update conversation timestamp
+    conversation.save()
+    
+    return Response({
+        'message': MessageSerializer(message, context={'request': request}).data,
+        'conversation': ConversationSerializer(conversation, context={'request': request}).data
+    }, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def mark_message_read_api(request, message_id):
+    message = get_object_or_404(Message, id=message_id)
+    
+    # Check if user is participant in conversation
+    if not message.conversation.participants.filter(id=request.user.id).exists():
+        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    MessageRead.objects.get_or_create(message=message, user=request.user)
+    
+    return Response({'message': 'Message marked as read'})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def toggle_pin_message_api(request, message_id):
+    message = get_object_or_404(Message, id=message_id)
+    
+    # Check if user is participant in conversation
+    if not message.conversation.participants.filter(id=request.user.id).exists():
+        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    message.is_pinned = not message.is_pinned
+    message.save()
+    
+    return Response({
+        'message': 'Message pin toggled',
+        'is_pinned': message.is_pinned
+    })
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_or_create_conversation_api(request, user_id):
+    other_user = get_object_or_404(CustomUser, id=user_id)
+    
+    # Check if conversation already exists
+    conversation = Conversation.objects.filter(
+        participants=request.user
+    ).filter(participants=other_user).first()
+    
+    if not conversation:
+        conversation = Conversation.objects.create()
+        conversation.participants.add(request.user, other_user)
+    
+    return Response(ConversationSerializer(conversation, context={'request': request}).data)
+
+# Call APIs
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def initiate_call_api(request):
+    serializer = InitiateCallSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    recipient = get_object_or_404(CustomUser, id=serializer.validated_data['recipient_id'])
+    
+    # End any existing calls
+    Call.objects.filter(
+        Q(caller=request.user, receiver=recipient) | Q(caller=recipient, receiver=request.user),
+        status__in=['initiated', 'ringing', 'answered']
+    ).update(status='ended', ended_at=timezone.now())
+    
+    # Get or create conversation
+    conversation = Conversation.objects.filter(
+        participants=request.user
+    ).filter(participants=recipient).first()
+    
+    if not conversation:
+        conversation = Conversation.objects.create()
+        conversation.participants.add(request.user, recipient)
+    
+    # Create call record
+    call = Call.objects.create(
+        conversation=conversation,
+        caller=request.user,
+        receiver=recipient,
+        call_type=serializer.validated_data['call_type'],
+        status='ringing'
+    )
+    
+    # Debug logging
+    print(f"Call created: ID={call.id}, Caller={call.caller.id}, Receiver={call.receiver.id}, Status={call.status}")
+    
+    return Response({
+        'call': CallSerializer(call).data,
+        'conversation_id': conversation.id
+    }, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def answer_call_api(request, call_id):
+    call = get_object_or_404(Call, id=call_id, receiver=request.user)
+    
+    if call.status != 'ringing':
+        return Response({'error': 'Call is not in ringing state'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    call.status = 'answered'
+    call.answered_at = timezone.now()
+    call.save()
+    
+    return Response(CallSerializer(call).data)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def end_call_api(request, call_id):
+    call = get_object_or_404(
+        Call.objects.filter(
+            Q(caller=request.user) | Q(receiver=request.user)
+        ),
+        id=call_id
+    )
+    
+    call.end_call()
+    
+    return Response(CallSerializer(call).data)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def decline_call_api(request, call_id):
+    call = get_object_or_404(Call, id=call_id, receiver=request.user)
+    
+    if call.status not in ['initiated', 'ringing']:
+        return Response({'error': 'Call cannot be declined'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    call.status = 'declined'
+    call.ended_at = timezone.now()
+    call.save()
+    
+    return Response(CallSerializer(call).data)
+
+class CallHistoryView(generics.ListAPIView):
+    serializer_class = CallSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Call.objects.filter(
+            Q(caller=self.request.user) | Q(receiver=self.request.user)
+        ).order_by('-started_at')
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def incoming_calls_api(request):
+    # Auto-hangup calls older than 50 seconds
+    timeout_calls = Call.objects.filter(
+        receiver=request.user,
+        status__in=['initiated', 'ringing'],
+        started_at__lt=timezone.now() - timezone.timedelta(seconds=50)
+    )
+    timeout_calls.update(status='missed', ended_at=timezone.now())
+    
+    calls = Call.objects.filter(
+        receiver=request.user,
+        status__in=['initiated', 'ringing']
+    ).order_by('-started_at')
+    
+    # Debug logging
+    print(f"User {request.user.id} checking incoming calls")
+    print(f"Found {calls.count()} calls with status: {[c.status for c in calls]}")
+    
+    return Response(CallSerializer(calls, many=True).data)

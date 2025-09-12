@@ -1,0 +1,169 @@
+{% extends 'accounts/superadmin_base.html' %}
+
+{% block title %}Manage Commission Ranges{% endblock %}
+
+{% block content %}
+    
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12 mt-2">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2></h2>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRangeModal">
+                        <i class="fas fa-plus me-2"></i>Add New Range
+                    </button>
+                </div>
+
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Current Commission Ranges</h5>
+                        <small class="text-muted">Commission will be deducted from vendor wallet when order is delivered</small>
+                    </div>
+                    <div class="card-body">
+                        {% if commission_ranges %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Order Range</th>
+                                            <th>Commission Amount</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for range in commission_ranges %}
+                                            <tr>
+                                                <td>
+                                                    <strong>₹{{ range.min_amount }}</strong> - 
+                                                    {% if range.max_amount %}
+                                                        <strong>₹{{ range.max_amount }}</strong>
+                                                    {% else %}
+                                                        <strong>∞</strong>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-danger">₹{{ range.commission_amount }}</span>
+                                                </td>
+                                                <td>
+                                                    {% if range.is_active %}
+                                                        <span class="badge bg-success">Active</span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">Inactive</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ range.created_at|date:"M d, Y" }}</td>
+                                                <td>
+                                                    <form method="post" class="d-inline">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="toggle">
+                                                        <input type="hidden" name="range_id" value="{{ range.id }}">
+                                                        <button type="submit" class="btn btn-sm {% if range.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                                                            {% if range.is_active %}
+                                                                <i class="fas fa-pause"></i> Deactivate
+                                                            {% else %}
+                                                                <i class="fas fa-play"></i> Activate
+                                                            {% endif %}
+                                                        </button>
+                                                    </form>
+                                                    <form method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this commission range?')">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="delete">
+                                                        <input type="hidden" name="range_id" value="{{ range.id }}">
+                                                        <button type="submit" class="btn btn-sm btn-danger">
+                                                            <i class="fas fa-trash"></i> Delete
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-percentage fa-3x text-muted mb-3"></i>
+                                <h5>No Commission Ranges Set</h5>
+                                <p class="text-muted">Add commission ranges to start charging vendors for orders.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">How Commission System Works</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-info-circle text-info me-2"></i>Commission Rules</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-success me-2"></i>Commission is deducted only when order status is "delivered"</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>Commission is deducted from vendor's wallet balance</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>If wallet balance is insufficient, order cannot be marked as delivered</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>Ranges are checked from lowest to highest amount</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-example text-warning me-2"></i>Example</h6>
+                                <div class="bg-light p-3 rounded">
+                                    <p class="mb-1"><strong>Order Amount: ₹750</strong></p>
+                                    <p class="mb-1">Range: ₹500 - ₹1000 → Commission: ₹25</p>
+                                    <p class="mb-0 text-success">✓ ₹25 will be deducted from vendor wallet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Add Range Modal -->
+<div class="modal fade" id="addRangeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Commission Range</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="min_amount" class="form-label">Minimum Order Amount (₹)</label>
+                        <input type="number" class="form-control" id="min_amount" name="min_amount" step="0.01" required>
+                        <div class="form-text">Orders equal to or above this amount will fall in this range</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="max_amount" class="form-label">Maximum Order Amount (₹)</label>
+                        <input type="number" class="form-control" id="max_amount" name="max_amount" step="0.01">
+                        <div class="form-text">Leave empty for unlimited maximum amount</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="commission_amount" class="form-label">Commission Amount (₹)</label>
+                        <input type="number" class="form-control" id="commission_amount" name="commission_amount" step="0.01" required>
+                        <div class="form-text">Fixed amount to deduct from vendor wallet</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Range</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
