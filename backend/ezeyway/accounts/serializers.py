@@ -473,7 +473,7 @@ class CustomerProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'category', 'subcategory', 'price', 'quantity',
-            'description', 'short_description', 'tags', 'images',
+            'description', 'short_description', 'tags', 'featured', 'images',
             'vendor_name', 'vendor_id', 'vendor_latitude', 'vendor_longitude', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
