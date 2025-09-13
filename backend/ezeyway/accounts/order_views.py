@@ -161,6 +161,13 @@ def update_order_status_api(request, order_id):
             order.vehicle_number = serializer.validated_data.get('vehicle_number')
             order.vehicle_color = serializer.validated_data.get('vehicle_color')
             order.estimated_delivery_time = serializer.validated_data.get('estimated_delivery_time')
+            
+            # Update delivery fee if provided
+            delivery_fee = serializer.validated_data.get('delivery_fee')
+            if delivery_fee is not None:
+                order.delivery_fee = delivery_fee
+                # Update total amount to include delivery fee
+                order.total_amount = order.subtotal + order.delivery_fee
         elif new_status == 'delivered':
             order.delivered_at = timezone.now()
             if hasattr(order, 'delivery'):

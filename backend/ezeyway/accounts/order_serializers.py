@@ -221,8 +221,8 @@ class CreateOrderSerializer(serializers.Serializer):
         # Calculate fees
         from decimal import Decimal
         delivery_fee = Decimal('0')  # No delivery fee in bill
-        tax_amount = subtotal * Decimal('0.05')
-        total_amount = subtotal + tax_amount
+        tax_amount = Decimal('0')  # No tax
+        total_amount = subtotal  # Subtotal only
         
         # Create order
         order = Order.objects.create(
@@ -275,6 +275,7 @@ class UpdateOrderStatusSerializer(serializers.Serializer):
     vehicle_number = serializers.CharField(required=False, max_length=20)
     vehicle_color = serializers.CharField(required=False, max_length=50)
     estimated_delivery_time = serializers.CharField(required=False)
+    delivery_fee = serializers.DecimalField(required=False, max_digits=10, decimal_places=2)
     
     def validate(self, attrs):
         status = attrs.get('status')
@@ -284,5 +285,7 @@ class UpdateOrderStatusSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Delivery boy phone is required for shipping")
             if not attrs.get('vehicle_number'):
                 raise serializers.ValidationError("Vehicle number is required for shipping")
+            if not attrs.get('delivery_fee'):
+                raise serializers.ValidationError("Delivery fee is required for shipping")
         
         return attrs
