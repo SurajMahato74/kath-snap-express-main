@@ -1211,6 +1211,7 @@ class UserFavoriteListView(generics.ListAPIView):
         
         return queryset.filter(id__in=online_favorites)
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def toggle_favorite_api(request):
@@ -1301,6 +1302,7 @@ def get_cart_api(request):
     serializer = CartSerializer(cart, context={'request': request})
     return Response(serializer.data)
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_to_cart_api(request):
