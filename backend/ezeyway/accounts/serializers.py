@@ -388,6 +388,13 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         image_files = validated_data.pop('image_files', [])
+        
+        # Handle boolean fields that come as strings from FormData
+        if 'featured' in validated_data:
+            featured_value = validated_data['featured']
+            if isinstance(featured_value, str):
+                validated_data['featured'] = featured_value.lower() in ('true', '1', 'yes')
+        
         product = Product.objects.create(**validated_data)
         
         for i, image_file in enumerate(image_files):
@@ -401,6 +408,12 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         image_files = validated_data.pop('image_files', None)
+        
+        # Handle boolean fields that come as strings from FormData
+        if 'featured' in validated_data:
+            featured_value = validated_data['featured']
+            if isinstance(featured_value, str):
+                validated_data['featured'] = featured_value.lower() in ('true', '1', 'yes')
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
