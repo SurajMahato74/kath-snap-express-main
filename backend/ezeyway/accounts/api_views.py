@@ -546,7 +546,8 @@ def vendor_toggle_status_api(request, pk):
         if request.user.is_superuser:
             vendor_profile = VendorProfile.objects.get(id=pk)
         else:
-            vendor_profile = VendorProfile.objects.get(id=pk, user=request.user)
+            # For regular vendors, get their own profile regardless of pk
+            vendor_profile = VendorProfile.objects.get(user=request.user)
 
         # Validate request data
         is_active = request.data.get('is_active')
