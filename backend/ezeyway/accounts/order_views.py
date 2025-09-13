@@ -166,8 +166,7 @@ def update_order_status_api(request, order_id):
             delivery_fee = serializer.validated_data.get('delivery_fee')
             if delivery_fee is not None:
                 order.delivery_fee = delivery_fee
-                # Update total amount to include delivery fee
-                order.total_amount = order.subtotal + order.delivery_fee
+                # Do NOT update total_amount - delivery fee is separate from bill total
         elif new_status == 'delivered':
             order.delivered_at = timezone.now()
             if hasattr(order, 'delivery'):
