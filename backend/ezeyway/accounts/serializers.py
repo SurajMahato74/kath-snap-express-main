@@ -10,8 +10,14 @@ class UserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'username', 'email', 'user_type', 'phone_number', 'address', 
                   'date_of_birth', 'profile_picture', 'is_verified', 'email_verified', 
-                  'phone_verified', 'created_at']
+                  'phone_verified', 'created_at', 'plain_password']
         read_only_fields = ['id', 'created_at', 'is_verified', 'email_verified', 'phone_verified']
+    
+    def validate_date_of_birth(self, value):
+        # Convert empty string to None for DateField
+        if value == "":
+            return None
+        return value
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
