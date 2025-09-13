@@ -23,7 +23,7 @@ from .serializers import (
 )
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
 from accounts import serializers
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 @csrf_exempt
 @api_view(['POST'])
@@ -510,7 +510,7 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
 class VendorProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = VendorProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         if self.request.user.is_superuser:
