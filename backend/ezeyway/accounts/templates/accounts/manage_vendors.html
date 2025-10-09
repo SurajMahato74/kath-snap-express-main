@@ -2,52 +2,83 @@
 
 {% block title %}Manage Vendors{% endblock %}
 
+{% block extra_css %}
+<style>
+    @media (max-width: 575.98px) {
+        .card-body {
+            padding: 0;
+        }
+        
+        .border-bottom:last-child {
+            border-bottom: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Manage Vendors</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-filter me-1"></i><span class="d-none d-sm-inline">Filter</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-download me-1"></i><span class="d-none d-sm-inline">Export</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card shadow">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
+                    <div class="card-header py-3">
+                        <h6 class="m-0 fw-bold text-primary">All Vendors</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <!-- Desktop Table -->
+                        <div class="table-responsive d-none d-lg-block">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
                                     <tr>
-                                        <th>ID</th>
-                                        <th>Business Name</th>
-                                        <th>Owner</th>
-                                        <th>Business Email</th>
-                                        <th>Business Phone</th>
-                                        <th>Status</th>
-                                        <th>Applied</th>
-                                        <th>Actions</th>
+                                        <th class="border-0">ID</th>
+                                        <th class="border-0">Business</th>
+                                        <th class="border-0">Owner</th>
+                                        <th class="border-0">Contact</th>
+                                        <th class="border-0">Status</th>
+                                        <th class="border-0">Applied</th>
+                                        <th class="border-0">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for vendor in vendor_profiles %}
                                     <tr>
-                                        <td>{{ vendor.id }}</td>
-                                        <td>
+                                        <td class="align-middle">#{{ vendor.id }}</td>
+                                        <td class="align-middle">
                                             <div class="fw-bold">{{ vendor.business_name }}</div>
                                             {% if vendor.business_license %}
                                                 <small class="text-muted">License: {{ vendor.business_license }}</small>
                                             {% endif %}
                                         </td>
-                                        <td>
+                                        <td class="align-middle">
                                             <div class="d-flex align-items-center">
                                                 {% if vendor.user.profile_picture %}
-                                                    <img src="{{ vendor.user.profile_picture.url }}" class="rounded-circle me-2" width="30" height="30">
+                                                    <img src="{{ vendor.user.profile_picture.url }}" class="rounded-circle me-2" width="32" height="32">
                                                 {% else %}
-                                                    <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px;">
+                                                    <div class="bg-secondary rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
                                                         <i class="fas fa-user text-white"></i>
                                                     </div>
                                                 {% endif %}
                                                 {{ vendor.user.username }}
                                             </div>
                                         </td>
-                                        <td>{{ vendor.business_email }}</td>
-                                        <td>{{ vendor.business_phone }}</td>
-                                        <td>
+                                        <td class="align-middle">
+                                            <div class="small">
+                                                <div>{{ vendor.business_email }}</div>
+                                                <div class="text-muted">{{ vendor.business_phone }}</div>
+                                            </div>
+                                        </td>
+                                        <td class="align-middle">
                                             {% if vendor.is_approved %}
                                                 <span class="badge bg-success">Approved</span>
                                                 {% if vendor.approval_date %}
@@ -57,8 +88,8 @@
                                                 <span class="badge bg-warning">Pending</span>
                                             {% endif %}
                                         </td>
-                                        <td>{{ vendor.user.date_joined|date:"M d, Y" }}</td>
-                                        <td>
+                                        <td class="align-middle text-muted">{{ vendor.user.date_joined|date:"M d, Y" }}</td>
+                                        <td class="align-middle">
                                             <div class="btn-group" role="group">
                                                 <button type="button" class="btn btn-sm btn-outline-primary" title="View Details">
                                                     <i class="fas fa-eye"></i>
@@ -79,7 +110,7 @@
                                     </tr>
                                     {% empty %}
                                     <tr>
-                                        <td colspan="8" class="text-center text-muted py-4">
+                                        <td colspan="7" class="text-center text-muted py-4">
                                             <i class="fas fa-store fa-3x mb-3"></i>
                                             <br>No vendors found
                                         </td>
@@ -87,6 +118,72 @@
                                     {% endfor %}
                                 </tbody>
                             </table>
+                        </div>
+                        
+                        <!-- Mobile Cards -->
+                        <div class="d-lg-none">
+                            {% for vendor in vendor_profiles %}
+                            <div class="border-bottom p-3">
+                                <div class="d-flex align-items-start">
+                                    <div class="me-3">
+                                        {% if vendor.user.profile_picture %}
+                                            <img src="{{ vendor.user.profile_picture.url }}" class="rounded-circle" width="40" height="40">
+                                        {% else %}
+                                            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                                <i class="fas fa-user text-white"></i>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <div>
+                                                <h6 class="mb-1">{{ vendor.business_name }}</h6>
+                                                <small class="text-muted">#{{ vendor.id }} • {{ vendor.user.username }}</small>
+                                            </div>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                                                    <i class="fas fa-ellipsis-v"></i>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li><a class="dropdown-item" href="#" title="View Details"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                                    {% if not vendor.is_approved %}
+                                                    <li><a class="dropdown-item text-success" href="#" title="Approve"><i class="fas fa-check me-2"></i>Approve</a></li>
+                                                    {% endif %}
+                                                    <li><a class="dropdown-item" href="#" title="Edit"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item text-danger" href="#" title="Reject/Delete"><i class="fas fa-times me-2"></i>Reject</a></li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted d-block">{{ vendor.business_email }}</small>
+                                            <small class="text-muted d-block">{{ vendor.business_phone }}</small>
+                                            {% if vendor.business_license %}
+                                            <small class="text-muted d-block">License: {{ vendor.business_license }}</small>
+                                            {% endif %}
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                {% if vendor.is_approved %}
+                                                    <span class="badge bg-success">Approved</span>
+                                                    {% if vendor.approval_date %}
+                                                    <small class="text-muted ms-2">{{ vendor.approval_date|date:"M d, Y" }}</small>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="badge bg-warning">Pending</span>
+                                                {% endif %}
+                                            </div>
+                                            <small class="text-muted">{{ vendor.user.date_joined|date:"M d, Y" }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% empty %}
+                            <div class="text-center text-muted py-5">
+                                <i class="fas fa-store fa-3x mb-3"></i>
+                                <br>No vendors found
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>

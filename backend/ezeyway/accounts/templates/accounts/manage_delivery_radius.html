@@ -2,17 +2,31 @@
 
 {% block title %}Manage Delivery Radius{% endblock %}
 
+{% block extra_css %}
+<style>
+    @media (max-width: 575.98px) {
+        .card-body {
+            padding: 1rem 0.75rem;
+        }
+        
+        .border-bottom:last-child {
+            border-bottom: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Manage Delivery Radius</h1>
+    <h1 class="h2">Delivery Radius</h1>
 </div>
 
 <!-- Add Delivery Radius Form -->
 <div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Add New Delivery Radius</h5>
+    <div class="col-lg-6 col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 fw-bold text-primary"><i class="fas fa-plus me-2"></i>Add New Delivery Radius</h6>
             </div>
             <div class="card-body">
                 <form method="post">
@@ -23,7 +37,9 @@
                         <input type="number" step="0.1" class="form-control" id="radius" name="radius" placeholder="e.g., 5.0" required>
                         <div class="form-text">Enter delivery radius in kilometers (e.g., 5.0, 10.5)</div>
                     </div>
-                    <button type="submit" class="btn btn-primary">Add Radius</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Add Radius
+                    </button>
                 </form>
             </div>
         </div>
@@ -31,35 +47,41 @@
 </div>
 
 <!-- Delivery Radii List -->
-<div class="card">
-    <div class="card-header">
-        <h5 class="card-title mb-0">Delivery Radii ({{ delivery_radii.count }})</h5>
+<div class="card shadow">
+    <div class="card-header py-3">
+        <h6 class="m-0 fw-bold text-primary">Delivery Radii ({{ delivery_radii.count }})</h6>
     </div>
-    <div class="card-body">
+    <div class="card-body p-0">
         {% if delivery_radii %}
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
+            <!-- Desktop Table -->
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <th>ID</th>
-                            <th>Radius (km)</th>
-                            <th>Created At</th>
-                            <th>Actions</th>
+                            <th class="border-0">ID</th>
+                            <th class="border-0">Radius</th>
+                            <th class="border-0">Created At</th>
+                            <th class="border-0">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for radius in delivery_radii %}
                         <tr>
-                            <td>{{ radius.id }}</td>
-                            <td>{{ radius.radius }} km</td>
-                            <td>{{ radius.created_at|date:"M d, Y H:i" }}</td>
-                            <td>
+                            <td class="align-middle">#{{ radius.id }}</td>
+                            <td class="align-middle">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-map-marker-alt text-muted me-2"></i>
+                                    <span class="fw-bold">{{ radius.radius }} km</span>
+                                </div>
+                            </td>
+                            <td class="align-middle text-muted">{{ radius.created_at|date:"M d, Y H:i" }}</td>
+                            <td class="align-middle">
                                 <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this delivery radius?');">
                                     {% csrf_token %}
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="radius_id" value="{{ radius.id }}">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i> Delete
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Radius">
+                                        <i class="fas fa-trash"></i>
                                     </button>
                                 </form>
                             </td>
@@ -68,10 +90,36 @@
                     </tbody>
                 </table>
             </div>
+            
+            <!-- Mobile Cards -->
+            <div class="d-md-none">
+                {% for radius in delivery_radii %}
+                <div class="border-bottom p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-map-marker-alt text-muted me-2"></i>
+                                <h6 class="mb-0">{{ radius.radius }} km</h6>
+                            </div>
+                            <small class="text-muted">#{{ radius.id }} • Created {{ radius.created_at|date:"M d, Y" }}</small>
+                        </div>
+                        <form method="post" onsubmit="return confirm('Are you sure you want to delete this delivery radius?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="radius_id" value="{{ radius.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Radius">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         {% else %}
-            <div class="text-center py-4">
+            <div class="text-center py-5">
                 <i class="fas fa-map-marker-alt fa-3x text-muted mb-3"></i>
-                <p class="text-muted">No delivery radii found. Add your first radius above.</p>
+                <h5 class="text-muted">No delivery radii found</h5>
+                <p class="text-muted">Add your first radius using the form above.</p>
             </div>
         {% endif %}
     </div>
