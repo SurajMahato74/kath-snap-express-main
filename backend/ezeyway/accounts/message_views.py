@@ -83,15 +83,30 @@ def send_message_api(request):
             conversation.participants.add(request.user, recipient)
     
     # Handle file upload
-    file_url = None
-    file_name = None
+    file_data = {}
     if data.get('file'):
         uploaded_file = data['file']
-        file_extension = os.path.splitext(uploaded_file.name)[1]
-        filename = f"messages/{conversation.id}_{request.user.id}_{uploaded_file.name}"
-        file_path = default_storage.save(filename, uploaded_file)
-        file_url = file_path
-        file_name = uploaded_file.name
+        
+        if data['message_type'] == 'image':
+            # Use image processor for images
+            from .image_utils import ImageProcessor
+            try:
+                processed_data = ImageProcessor.process_message_image(
+                    uploaded_file, conversation.id, request.user.id
+                )
+                file_data.update(processed_data)
+            except ValueError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Handle regular files
+            file_extension = os.path.splitext(uploaded_file.name)[1]
+            filename = f"messages/{conversation.id}_{request.user.id}_{uploaded_file.name}"
+            file_path = default_storage.save(filename, uploaded_file)
+            file_data.update({
+                'file_url': file_path,
+                'file_name': uploaded_file.name,
+                'file_size': uploaded_file.size
+            })
     
     # Create message
     message = Message.objects.create(
@@ -99,8 +114,7 @@ def send_message_api(request):
         sender=request.user,
         message_type=data['message_type'],
         content=data.get('content', ''),
-        file_url=file_url,
-        file_name=file_name
+        **file_data
     )
     
     # Mark as read by sender
@@ -274,3 +288,25 @@ def incoming_calls_api(request):
     print(f"Found {calls.count()} calls with status: {[c.status for c in calls]}")
     
     return Response(CallSerializer(calls, many=True).data)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def message_image_api(request, message_id):
+    """Serve message images with access control"""
+    message = get_object_or_404(Message, id=message_id, message_type='image')
+    
+    # Check if user has access to this conversation
+    if not message.conversation.participants.filter(id=request.user.id).exists():
+        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Return image URLs
+    return Response({
+        'image_url': message.file_url,
+        'thumbnail_url': message.thumbnail_url,
+        'file_name': message.file_name,
+        'file_size': message.file_size,
+        'dimensions': {
+            'width': message.image_width,
+            'height': message.image_height
+        } if message.image_width and message.image_height else None
+    })

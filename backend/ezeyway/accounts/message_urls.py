@@ -12,6 +12,7 @@ urlpatterns = [
     path('messages/send/', message_views.send_message_api, name='send_message'),
     path('messages/<int:message_id>/read/', message_views.mark_message_read_api, name='mark_message_read'),
     path('messages/<int:message_id>/pin/', message_views.toggle_pin_message_api, name='toggle_pin_message'),
+    path('messages/<int:message_id>/image/', message_views.message_image_api, name='message_image'),
     
     # Call APIs
     path('calls/initiate/', message_views.initiate_call_api, name='initiate_call'),

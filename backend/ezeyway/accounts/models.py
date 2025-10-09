@@ -15,11 +15,13 @@ class CustomUser(AbstractUser):
     ]
     
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='customer')
+    is_customer = models.BooleanField(default=True)  # Can act as customer
+    is_vendor = models.BooleanField(default=False)   # Can act as vendor (after approval)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     profile_picture = models.CharField(max_length=500, blank=True, null=True)  # Temporarily using CharField instead of ImageField
-    
+
     plain_password = models.CharField(max_length=255, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
@@ -426,7 +428,93 @@ def create_auth_token(sender, instance=None, created=False, **kwargs):
 @receiver(post_save, sender=VendorProfile)
 def create_vendor_wallet(sender, instance=None, created=False, **kwargs):
     if created:
-        VendorWallet.objects.create(vendor=instance)
+        # Get initial wallet points set by admin
+        initial_points = InitialWalletPoints.objects.first()
+        initial_balance = initial_points.points if initial_points else 0
+        
+        # Create wallet with initial balance
+        wallet = VendorWallet.objects.create(
+            vendor=instance,
+            balance=initial_balance,
+            total_earned=initial_balance
+        )
+        
+        # Create transaction record for initial points
+        if initial_balance > 0:
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                transaction_type='credit',
+                amount=initial_balance,
+                description='Initial wallet points from admin',
+                status='completed'
+            )
+
+class Category(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name_plural = "Categories"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+class DeliveryRadius(models.Model):
+    radius = models.FloatField(help_text="Delivery radius in kilometers")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name_plural = "Delivery Radii"
+        ordering = ['radius']
+    
+    def __str__(self):
+        return f"{self.radius} km"
+
+class InitialWalletPoints(models.Model):
+    points = models.DecimalField(max_digits=10, decimal_places=2, help_text="Initial wallet points for new vendors")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name_plural = "Initial Wallet Points"
+        ordering = ['points']
+    
+    def __str__(self):
+        return f"₹{self.points}"
+
+class ChargeRate(models.Model):
+    min_amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Minimum order amount")
+    max_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Maximum order amount (null for unlimited)")
+    charge = models.DecimalField(max_digits=10, decimal_places=2, help_text="Charge amount for this range")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['min_amount']
+    
+    def __str__(self):
+        max_display = f"₹{self.max_amount}" if self.max_amount else "∞"
+        return f"₹{self.min_amount} - {max_display}: ₹{self.charge} charge"
+    
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        # Check for overlapping ranges
+        existing_ranges = ChargeRate.objects.exclude(id=self.id)
+        for existing in existing_ranges:
+            # Check if ranges overlap
+            existing_max = existing.max_amount or float('inf')
+            current_max = self.max_amount or float('inf')
+            
+            if (self.min_amount < existing_max and 
+                (self.max_amount is None or self.max_amount > existing.min_amount)):
+                raise ValidationError(f'Range overlaps with existing range: {existing}')
+    
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
 # Import order models
 from .order_models import *

@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
-from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction
+from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, DeliveryRadius, InitialWalletPoints, ChargeRate
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
 
 def login_view(request):
@@ -323,6 +323,142 @@ def vendor_wallet_view(request):
     except VendorProfile.DoesNotExist:
         messages.error(request, 'Vendor profile not found.')
         return redirect('login')
+
+@login_required
+def manage_categories(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'add':
+            name = request.POST.get('name')
+            if name:
+                try:
+                    Category.objects.create(name=name)
+                    messages.success(request, 'Category added successfully!')
+                except Exception as e:
+                    messages.error(request, f'Error adding category: {str(e)}')
+            else:
+                messages.error(request, 'Category name is required.')
+        
+        elif action == 'delete':
+            category_id = request.POST.get('category_id')
+            try:
+                Category.objects.get(id=category_id).delete()
+                messages.success(request, 'Category deleted successfully!')
+            except Category.DoesNotExist:
+                messages.error(request, 'Category not found.')
+        
+        return redirect('manage_categories')
+    
+    categories = Category.objects.all().order_by('name')
+    context = {
+        'categories': categories,
+    }
+    return render(request, 'accounts/manage_categories.html', context)
+
+@login_required
+def manage_delivery_radius(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'add':
+            radius = request.POST.get('radius')
+            if radius:
+                try:
+                    DeliveryRadius.objects.create(radius=float(radius))
+                    messages.success(request, 'Delivery radius added successfully!')
+                except Exception as e:
+                    messages.error(request, f'Error adding delivery radius: {str(e)}')
+            else:
+                messages.error(request, 'Radius value is required.')
+        
+        elif action == 'delete':
+            radius_id = request.POST.get('radius_id')
+            try:
+                DeliveryRadius.objects.get(id=radius_id).delete()
+                messages.success(request, 'Delivery radius deleted successfully!')
+            except DeliveryRadius.DoesNotExist:
+                messages.error(request, 'Delivery radius not found.')
+        
+        return redirect('manage_delivery_radius')
+    
+    delivery_radii = DeliveryRadius.objects.all().order_by('radius')
+    context = {
+        'delivery_radii': delivery_radii,
+    }
+    return render(request, 'accounts/manage_delivery_radius.html', context)
+
+@login_required
+def manage_initial_wallet_points(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'add_points':
+            points = request.POST.get('points')
+            if points:
+                try:
+                    InitialWalletPoints.objects.create(points=float(points))
+                    messages.success(request, 'Initial wallet points added successfully!')
+                except Exception as e:
+                    messages.error(request, f'Error adding initial wallet points: {str(e)}')
+            else:
+                messages.error(request, 'Points value is required.')
+        
+        elif action == 'delete_points':
+            points_id = request.POST.get('points_id')
+            try:
+                InitialWalletPoints.objects.get(id=points_id).delete()
+                messages.success(request, 'Initial wallet points deleted successfully!')
+            except InitialWalletPoints.DoesNotExist:
+                messages.error(request, 'Initial wallet points not found.')
+        
+        elif action == 'add_charge':
+            min_amount = request.POST.get('min_amount')
+            max_amount = request.POST.get('max_amount')
+            charge = request.POST.get('charge')
+            
+            if min_amount and charge:
+                try:
+                    ChargeRate.objects.create(
+                        min_amount=float(min_amount),
+                        max_amount=float(max_amount) if max_amount else None,
+                        charge=float(charge)
+                    )
+                    messages.success(request, 'Charge rate added successfully!')
+                except Exception as e:
+                    messages.error(request, f'Error adding charge rate: {str(e)}')
+            else:
+                messages.error(request, 'Min amount and charge are required.')
+        
+        elif action == 'delete_charge':
+            charge_id = request.POST.get('charge_id')
+            try:
+                ChargeRate.objects.get(id=charge_id).delete()
+                messages.success(request, 'Charge rate deleted successfully!')
+            except ChargeRate.DoesNotExist:
+                messages.error(request, 'Charge rate not found.')
+        
+        return redirect('manage_initial_wallet_points')
+    
+    wallet_points = InitialWalletPoints.objects.all().order_by('points')
+    charge_rates = ChargeRate.objects.all().order_by('min_amount')
+    context = {
+        'wallet_points': wallet_points,
+        'charge_rates': charge_rates,
+    }
+    return render(request, 'accounts/manage_initial_wallet_points.html', context)
 
 def api_docs(request):
     return render(request, 'accounts/api_docs.html')

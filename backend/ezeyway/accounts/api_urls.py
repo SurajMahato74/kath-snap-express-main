@@ -18,6 +18,7 @@ urlpatterns = [
     path('profile/upload-picture/', api_views.upload_profile_picture_api, name='api_upload_profile_picture'),
     path('vendor/status/', api_views.vendor_status_api, name='api_vendor_status'),
     path('vendor/toggle-status/', api_views.toggle_vendor_status_api, name='api_toggle_vendor_status'),
+    path('switch-role/', api_views.switch_role_api, name='api_switch_role'),
     path('change-password/', api_views.change_password_api, name='api_change_password'),
     path('change-password/simple/', api_views.SimpleChangePasswordView.as_view(), name='api_simple_change_password'),
 
@@ -35,6 +36,12 @@ urlpatterns = [
     path('verify-otp/', api_views.verify_otp_api, name='api_verify_otp'),
     path('update-email/', api_views.update_email_api, name='api_update_email'),
     
+    # Categories API
+    path('categories/', api_views.get_categories_api, name='api_get_categories'),
+    
+    # Delivery Radius API
+    path('delivery-radius/', api_views.get_delivery_radius_api, name='api_get_delivery_radius'),
+    
     # Vendor APIs
     path('vendor-profiles/', api_views.VendorProfileListCreateView.as_view(), name='api_vendor_profiles'),
     path('vendor-profiles/<int:pk>/', api_views.VendorProfileDetailView.as_view(), name='api_vendor_profile_detail'),
@@ -51,6 +58,8 @@ urlpatterns = [
     path('accounts/wallet/', api_views.vendor_wallet_api, name='api_vendor_wallet'),
     path('accounts/wallet/transactions/', api_views.wallet_transactions_api, name='api_wallet_transactions'),
     path('accounts/wallet/add-money/', api_views.add_money_api, name='api_add_money'),
+    path('accounts/wallet/khalti-payment/', api_views.initiate_khalti_payment, name='api_khalti_payment'),
+    path('accounts/wallet/khalti-verify/', api_views.verify_khalti_payment, name='api_khalti_verify'),
     
     # Customer Search APIs
     path('search/products/', api_views.CustomerProductSearchView.as_view(), name='api_customer_product_search'),

@@ -571,6 +571,39 @@ def vendor_accept_order_api(request, order_id):
         vendor_profile = VendorProfile.objects.get(user=request.user)
         order = Order.objects.get(id=order_id, vendor=vendor_profile, status='pending')
         
+        # Get charge for this order amount
+        from .models import ChargeRate, VendorWallet
+        
+        # Find matching charge rate
+        charge_amount = 0
+        charge_rates = ChargeRate.objects.all().order_by('min_amount')
+        for rate in charge_rates:
+            if order.total_amount >= rate.min_amount:
+                if rate.max_amount is None or order.total_amount <= rate.max_amount:
+                    charge_amount = rate.charge
+                    break
+        
+        # Check if vendor has sufficient wallet balance
+        wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
+        
+        if wallet.balance < charge_amount:
+            return Response({
+                'error': f'Insufficient wallet balance. Required: ₹{charge_amount}, Available: ₹{wallet.balance}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Deduct charge from vendor wallet
+        if charge_amount > 0:
+            success = wallet.deduct_commission(
+                amount=charge_amount,
+                order_amount=order.total_amount,
+                description=f"Order confirmation charge - Order #{order.order_number}"
+            )
+            
+            if not success:
+                return Response({
+                    'error': 'Failed to deduct charge from wallet'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
         # Update order status
         order.status = 'confirmed'
         order.confirmed_at = timezone.now()
@@ -581,14 +614,16 @@ def vendor_accept_order_api(request, order_id):
             order=order,
             status='confirmed',
             changed_by=request.user,
-            notes='Order accepted by vendor'
+            notes=f'Order accepted by vendor. Charge deducted: ₹{charge_amount}'
         )
         
         # Send comprehensive order status notifications
         send_order_status_notifications(order, 'confirmed', 'pending')
         
         return Response({
-            'message': 'Order accepted successfully',
+            'message': f'Order accepted successfully. Charge of ₹{charge_amount} deducted from wallet.',
+            'charge_deducted': float(charge_amount),
+            'remaining_balance': float(wallet.balance),
             'order': OrderSerializer(order, context={'request': request}).data
         })
         

@@ -39,6 +39,11 @@ class Message(models.Model):
     content = models.TextField(blank=True, null=True)
     file_url = models.CharField(max_length=500, blank=True, null=True)
     file_name = models.CharField(max_length=255, blank=True, null=True)
+    # Image-specific fields
+    thumbnail_url = models.CharField(max_length=500, blank=True, null=True)
+    file_size = models.IntegerField(blank=True, null=True)
+    image_width = models.IntegerField(blank=True, null=True)
+    image_height = models.IntegerField(blank=True, null=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='sent')
     is_pinned = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

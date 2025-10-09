@@ -9,6 +9,7 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'sender', 'message_type', 'content', 'file_url', 'file_name', 
+                 'thumbnail_url', 'file_size', 'image_width', 'image_height',
                  'status', 'is_pinned', 'created_at', 'is_read']
         read_only_fields = ['id', 'sender', 'created_at']
     

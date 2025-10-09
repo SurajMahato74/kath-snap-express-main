@@ -25,6 +25,9 @@ urlpatterns = [
     path('superadmin/users/', views.manage_users, name='manage_users'),
     path('superadmin/vendors/', views.manage_vendors, name='manage_vendors'),
     path('superadmin/commission-ranges/', views.manage_commission_ranges, name='manage_commission_ranges'),
+    path('superadmin/categories/', views.manage_categories, name='manage_categories'),
+    path('superadmin/delivery-radius/', views.manage_delivery_radius, name='manage_delivery_radius'),
+    path('superadmin/initial-wallet-points/', views.manage_initial_wallet_points, name='manage_initial_wallet_points'),
     
     # Vendor Wallet
     path('vendor/wallet/', views.vendor_wallet_view, name='vendor_wallet'),

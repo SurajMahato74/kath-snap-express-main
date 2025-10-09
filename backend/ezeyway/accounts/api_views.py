@@ -10,7 +10,7 @@ from decimal import Decimal
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 import math
-from .models import CustomUser, VendorProfile, VendorDocument, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem
+from .models import CustomUser, VendorProfile, VendorDocument, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, DeliveryRadius
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     ChangePasswordSerializer, ForgotPasswordSerializer,
@@ -60,7 +60,7 @@ def login_api(request):
             }, status=status.HTTP_200_OK)
 
         token, created = Token.objects.get_or_create(user=user)
-        
+
         # Check if vendor profile exists and approval status
         try:
             vendor_profile = VendorProfile.objects.get(user=user)
@@ -70,9 +70,18 @@ def login_api(request):
             profile_exists = False
             is_approved = False
 
+        # Determine available roles - users can be both customer and vendor
+        available_roles = ['customer']  # All users can be customers
+
+        # Check if user can be a vendor (has approved profile)
+        if profile_exists and is_approved:
+            available_roles.append('vendor')
+
         return Response({
             'token': token.key,
             'user': UserSerializer(user).data,
+            'available_roles': available_roles,
+            'current_role': user.user_type,
             'profile_exists': profile_exists,
             'is_approved': is_approved,
             'message': 'Login successful'
@@ -91,8 +100,33 @@ def logout_api(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def profile_api(request):
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
+    user = request.user
+
+    # Check if vendor profile exists and approval status
+    try:
+        vendor_profile = VendorProfile.objects.get(user=user)
+        profile_exists = True
+        is_approved = vendor_profile.is_approved
+    except VendorProfile.DoesNotExist:
+        profile_exists = False
+        is_approved = False
+
+    # Determine available roles - users can be both customer and vendor
+    available_roles = ['customer']  # All users can be customers
+
+    # Check if user can be a vendor (has approved profile)
+    if profile_exists and is_approved:
+        available_roles.append('vendor')
+
+    # Get user data
+    serializer = UserSerializer(user)
+    user_data = serializer.data
+
+    # Add available_roles to response
+    user_data['available_roles'] = available_roles
+    user_data['current_role'] = user.user_type
+
+    return Response(user_data)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -505,6 +539,12 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
         # Prevent duplicate profiles
         if VendorProfile.objects.filter(user=self.request.user).exists():
             raise drf_serializers.ValidationError({'user': 'Vendor profile already exists.'})
+        
+        # Auto-set delivery radius from admin settings
+        default_radius = DeliveryRadius.objects.first()
+        if default_radius:
+            serializer.validated_data['delivery_radius'] = default_radius.radius
+        
         serializer.save(user=self.request.user)
 
 class VendorProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -882,6 +922,69 @@ def wallet_transactions_api(request):
         })
     except (VendorProfile.DoesNotExist, VendorWallet.DoesNotExist):
         return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def initiate_khalti_payment(request):
+    import requests
+    import json
+    
+    if not request.user.is_vendor:
+        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        amount = float(request.data.get('amount', 0))
+        
+        if amount <= 0:
+            return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Khalti payment initiation
+        amount_in_paisa = int(amount * 100)
+        return_url = "http://localhost:8080/vendor/wallet?payment_complete=1"
+        
+        payload = {
+            "return_url": return_url,
+            "website_url": request.build_absolute_uri('/')[:-1],
+            "amount": amount_in_paisa,
+            "purchase_order_id": f"Wallet_{vendor_profile.id}_{timezone.now().timestamp()}",
+            "purchase_order_name": "Wallet Recharge",
+            "customer_info": {
+                "name": vendor_profile.owner_name or request.user.username,
+                "email": vendor_profile.business_email or request.user.email,
+                "phone": vendor_profile.business_phone or "9800000000"
+            }
+        }
+        
+        headers = {
+            'Authorization': 'key eee666a6159b46a89eda9a4dde2a785b',
+            'Content-Type': 'application/json',
+        }
+        
+        response = requests.post(
+            'https://a.khalti.com/api/v2/epayment/initiate/',
+            data=json.dumps(payload),
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            if 'pidx' in response_data and 'payment_url' in response_data:
+                return Response({
+                    'success': True,
+                    'payment_url': response_data['payment_url'],
+                    'pidx': response_data['pidx']
+                })
+            else:
+                return Response({'error': 'Invalid response from Khalti'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': 'Failed to initiate payment'}, status=status.HTTP_400_BAD_REQUEST)
+            
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -1384,3 +1487,134 @@ def clear_cart_api(request):
         return Response({'message': 'Cart cleared successfully'})
     except Cart.DoesNotExist:
         return Response({'message': 'Cart is already empty'})
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_categories_api(request):
+    categories = Category.objects.all().order_by('name')
+    return Response({
+        'categories': [{'id': cat.id, 'name': cat.name} for cat in categories]
+    })
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_delivery_radius_api(request):
+    # Get the first (smallest) delivery radius as default
+    radius = DeliveryRadius.objects.first()
+    return Response({
+        'delivery_radius': radius.radius if radius else 5.0
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def switch_role_api(request):
+    new_role = request.data.get('role')
+
+    if new_role not in ['customer', 'vendor']:
+        return Response({'error': 'Invalid role'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = request.user
+
+    # Check if user can switch to this role
+    if new_role == 'customer' and not user.is_customer:
+        return Response({'error': 'Customer role not available'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if new_role == 'vendor':
+        if not user.is_vendor:
+            return Response({'error': 'Vendor role not available'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            vendor_profile = VendorProfile.objects.get(user=user)
+            if not vendor_profile.is_approved:
+                return Response({'error': 'Vendor profile not approved'}, status=status.HTTP_400_BAD_REQUEST)
+        except VendorProfile.DoesNotExist:
+            return Response({'error': 'Vendor profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Update user type
+    user.user_type = new_role
+    user.save()
+
+    return Response({
+        'message': f'Switched to {new_role}',
+        'current_role': new_role,
+        'user': UserSerializer(user).data
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def verify_khalti_payment(request):
+    import requests
+    import json
+    
+    if not request.user.is_vendor:
+        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        pidx = request.data.get('pidx')
+        if not pidx:
+            return Response({'error': 'Payment ID (pidx) is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify payment with Khalti
+        headers = {
+            'Authorization': 'key eee666a6159b46a89eda9a4dde2a785b',
+            'Content-Type': 'application/json',
+        }
+        
+        response = requests.post(
+            'https://a.khalti.com/api/v2/epayment/lookup/',
+            data=json.dumps({'pidx': pidx}),
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            payment_data = response.json()
+            
+            if payment_data.get('status') == 'Completed':
+                vendor_profile = VendorProfile.objects.get(user=request.user)
+                wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
+                
+                from decimal import Decimal
+                amount = Decimal(str(payment_data.get('total_amount', 0))) / 100  # Convert from paisa
+                
+                # Check if transaction already exists
+                existing_transaction = WalletTransaction.objects.filter(
+                    wallet=wallet,
+                    reference_id=pidx
+                ).first()
+                
+                if not existing_transaction:
+                    # Add money to wallet
+                    wallet.add_money(
+                        amount=amount,
+                        description=f"Khalti Payment - {pidx}"
+                    )
+                    
+                    # Update transaction with payment details
+                    latest_transaction = wallet.transactions.first()
+                    if latest_transaction:
+                        latest_transaction.payment_method = 'khalti'
+                        latest_transaction.reference_id = pidx
+                        latest_transaction.status = 'completed'
+                        latest_transaction.save()
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Payment verified and wallet updated',
+                        'amount': amount,
+                        'new_balance': wallet.balance
+                    })
+                else:
+                    return Response({
+                        'success': True,
+                        'message': 'Payment already processed',
+                        'new_balance': wallet.balance
+                    })
+            else:
+                return Response({'error': 'Payment not completed'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+            
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
