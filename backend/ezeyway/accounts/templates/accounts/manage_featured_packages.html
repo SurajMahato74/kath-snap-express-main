@@ -1,0 +1,215 @@
+{% extends 'accounts/superadmin_base.html' %}
+
+{% block title %}Manage Featured Packages{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-star me-2"></i>Manage Featured Product Packages</h1>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- Add New Package Form -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Add New Featured Package</h5>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="name" class="form-label">Package Name *</label>
+                    <input type="text" class="form-control" id="name" name="name" placeholder="e.g., 10 Days Basic" required>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="duration_days" class="form-label">Duration (Days) *</label>
+                    <input type="number" class="form-control" id="duration_days" name="duration_days" min="1" placeholder="10" required>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="amount" class="form-label">Amount (₹) *</label>
+                    <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0" placeholder="10.00" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="package_type" class="form-label">Package Type</label>
+                    <select class="form-select" id="package_type" name="package_type">
+                        <option value="basic">Basic</option>
+                        <option value="premium">Premium</option>
+                        <option value="gold">Gold</option>
+                        <option value="platinum">Platinum</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="2" placeholder="Optional package description"></textarea>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Add Package
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Existing Packages -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Existing Featured Packages</h5>
+    </div>
+    <div class="card-body">
+        {% if packages %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Package Name</th>
+                            <th>Duration</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for package in packages %}
+                            <tr>
+                                <td>
+                                    <strong>{{ package.name }}</strong>
+                                    {% if package.description %}
+                                        <br><small class="text-muted">{{ package.description|truncatechars:50 }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ package.duration_days }} days</span>
+                                </td>
+                                <td>
+                                    <strong class="text-success">₹{{ package.amount }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if package.package_type == 'basic' %}secondary{% elif package.package_type == 'premium' %}primary{% elif package.package_type == 'gold' %}warning{% else %}dark{% endif %}">
+                                        {{ package.get_package_type_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if package.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ package.created_at|date:"M d, Y" }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <!-- Toggle Status -->
+                                        <form method="post" class="d-inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="toggle">
+                                            <input type="hidden" name="package_id" value="{{ package.id }}">
+                                            <button type="submit" class="btn btn-sm btn-{% if package.is_active %}warning{% else %}success{% endif %}" 
+                                                    title="{% if package.is_active %}Deactivate{% else %}Activate{% endif %}">
+                                                <i class="fas fa-{% if package.is_active %}pause{% else %}play{% endif %}"></i>
+                                            </button>
+                                        </form>
+                                        
+                                        <!-- Delete -->
+                                        <form method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this package?')">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="package_id" value="{{ package.id }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-star fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No Featured Packages Found</h5>
+                <p class="text-muted">Create your first featured product package using the form above.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Package Statistics -->
+{% if packages %}
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-primary">{{ packages|length }}</h5>
+                <p class="card-text">Total Packages</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-success">{{ packages|length }}</h5>
+                <p class="card-text">Active Packages</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-warning">₹{% for package in packages %}{{ package.amount }}{% if not forloop.last %}, {% endif %}{% endfor %}</h5>
+                <p class="card-text">Price Range</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-info">{% for package in packages %}{{ package.duration_days }}{% if not forloop.last %}, {% endif %}{% endfor %} days</h5>
+                <p class="card-text">Duration Range</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-generate package name based on duration and type
+    document.addEventListener('DOMContentLoaded', function() {
+        const durationInput = document.getElementById('duration_days');
+        const typeSelect = document.getElementById('package_type');
+        const nameInput = document.getElementById('name');
+        
+        function updatePackageName() {
+            const duration = durationInput.value;
+            const type = typeSelect.options[typeSelect.selectedIndex].text;
+            
+            if (duration) {
+                nameInput.value = `${duration} Days ${type}`;
+            }
+        }
+        
+        durationInput.addEventListener('input', updatePackageName);
+        typeSelect.addEventListener('change', updatePackageName);
+    });
+</script>
+{% endblock %}

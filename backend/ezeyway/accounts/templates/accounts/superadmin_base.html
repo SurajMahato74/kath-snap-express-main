@@ -11,6 +11,10 @@
         .sidebar {
             min-height: 100vh;
             box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            overflow-y: auto;
+            position: fixed;
+            top: 56px;
+            bottom: 0;
         }
         
         @media (max-width: 767.98px) {
@@ -152,7 +156,7 @@
         <div class="row">
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block bg-white sidebar" id="sidebar">
-                <div class="position-sticky pt-3">
+                <div class="pt-3">
                     <div class="d-flex justify-content-between align-items-center d-md-none mb-3">
                         <h6 class="text-muted mb-0">Menu</h6>
                         <button class="btn btn-sm btn-outline-secondary" id="sidebarClose">
@@ -175,11 +179,7 @@
                                 <i class="fas fa-store me-2"></i>Manage Vendors
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'manage_commission_ranges' %}active{% endif %}" href="{% url 'manage_commission_ranges' %}">
-                                <i class="fas fa-percentage me-2"></i><span class="d-none d-lg-inline">Commission </span>Ranges
-                            </a>
-                        </li>
+
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.url_name == 'manage_categories' %}active{% endif %}" href="{% url 'manage_categories' %}">
                                 <i class="fas fa-tags me-2"></i>Add Category
@@ -196,10 +196,37 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/">
-                                <i class="fas fa-cog me-2"></i>Django Admin
+                            <a class="nav-link {% if request.resolver_match.url_name == 'manage_featured_packages' %}active{% endif %}" href="{% url 'manage_featured_packages' %}">
+                                <i class="fas fa-star me-2"></i><span class="d-none d-lg-inline">Featured </span>Packages
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'manage_sliders' %}active{% endif %}" href="{% url 'manage_sliders' %}">
+                                <i class="fas fa-images me-2"></i><span class="d-none d-lg-inline">Manage </span>Sliders
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'manage_push_notifications' %}active{% endif %}" href="{% url 'manage_push_notifications' %}">
+                                <i class="fas fa-bell me-2"></i><span class="d-none d-lg-inline">Push </span>Notifications
+                            </a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle {% if 'admin_messages' in request.resolver_match.url_name %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-comments me-2"></i><span class="d-none d-lg-inline">Messages</span>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{% url 'admin_messages' %}?type=all">
+                                    <i class="fas fa-users me-2"></i>All Messages
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'admin_messages' %}?type=customer">
+                                    <i class="fas fa-user me-2"></i>Customer Messages
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'admin_messages' %}?type=vendor">
+                                    <i class="fas fa-store me-2"></i>Vendor Messages
+                                </a></li>
+                            </ul>
+                        </li>
+
                     </ul>
                 </div>
             </nav>

@@ -7,7 +7,9 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
-from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, DeliveryRadius, InitialWalletPoints, ChargeRate
+from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification
+from .message_models import Conversation, Message, MessageRead
+from .order_models import Order, OrderItem, PaymentTransaction
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
 
 def login_view(request):
@@ -76,10 +78,14 @@ def manage_vendors(request):
         messages.error(request, 'Access denied.')
         return redirect('login')
 
+    # Ensure user has auth token
+    from rest_framework.authtoken.models import Token
+    token, created = Token.objects.get_or_create(user=request.user)
+
     vendor_profiles = VendorProfile.objects.all().order_by('-user__date_joined')
     context = {
         'vendor_profiles': vendor_profiles,
-        'auth_token': request.user.auth_token.key if hasattr(request.user, 'auth_token') else None
+        'auth_token': token.key
     }
     return render(request, 'accounts/manage_vendors.html', context)
 
@@ -459,6 +465,394 @@ def manage_initial_wallet_points(request):
         'charge_rates': charge_rates,
     }
     return render(request, 'accounts/manage_initial_wallet_points.html', context)
+
+@login_required
+def manage_featured_packages(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'add':
+            name = request.POST.get('name')
+            duration_days = request.POST.get('duration_days')
+            amount = request.POST.get('amount')
+            package_type = request.POST.get('package_type')
+            description = request.POST.get('description')
+            
+            if name and duration_days and amount:
+                try:
+                    FeaturedProductPackage.objects.create(
+                        name=name,
+                        duration_days=int(duration_days),
+                        amount=float(amount),
+                        package_type=package_type,
+                        description=description
+                    )
+                    messages.success(request, 'Featured package added successfully!')
+                except Exception as e:
+                    messages.error(request, f'Error adding package: {str(e)}')
+            else:
+                messages.error(request, 'Name, duration, and amount are required.')
+        
+        elif action == 'delete':
+            package_id = request.POST.get('package_id')
+            try:
+                FeaturedProductPackage.objects.get(id=package_id).delete()
+                messages.success(request, 'Package deleted successfully!')
+            except FeaturedProductPackage.DoesNotExist:
+                messages.error(request, 'Package not found.')
+        
+        elif action == 'toggle':
+            package_id = request.POST.get('package_id')
+            try:
+                package = FeaturedProductPackage.objects.get(id=package_id)
+                package.is_active = not package.is_active
+                package.save()
+                status = 'activated' if package.is_active else 'deactivated'
+                messages.success(request, f'Package {status} successfully!')
+            except FeaturedProductPackage.DoesNotExist:
+                messages.error(request, 'Package not found.')
+        
+        return redirect('manage_featured_packages')
+    
+    packages = FeaturedProductPackage.objects.all().order_by('duration_days', 'amount')
+    context = {
+        'packages': packages,
+    }
+    return render(request, 'accounts/manage_featured_packages.html', context)
+
+@login_required
+def manage_sliders(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'add':
+            title = request.POST.get('title')
+            description = request.POST.get('description')
+            link_url = request.POST.get('link_url')
+            visibility = request.POST.get('visibility')
+            display_order = request.POST.get('display_order')
+            start_date = request.POST.get('start_date')
+            end_date = request.POST.get('end_date')
+            image = request.FILES.get('image')
+            
+            if title and image:
+                try:
+                    # Validate image format
+                    allowed_formats = ['gif', 'png', 'svg', 'jpg', 'jpeg']
+                    file_extension = image.name.split('.')[-1].lower()
+                    
+                    if file_extension not in allowed_formats:
+                        messages.error(request, 'Invalid file format. Please upload GIF, PNG, SVG, or JPEG files only.')
+                        return redirect('manage_sliders')
+                    
+                    slider = Slider.objects.create(
+                        title=title,
+                        description=description,
+                        image=image,
+                        link_url=link_url if link_url else None,
+                        visibility=visibility,
+                        display_order=int(display_order) if display_order else 0
+                    )
+                    
+                    # Handle date fields
+                    if start_date:
+                        from datetime import datetime
+                        slider.start_date = datetime.strptime(start_date, '%Y-%m-%dT%H:%M')
+                    if end_date:
+                        from datetime import datetime
+                        slider.end_date = datetime.strptime(end_date, '%Y-%m-%dT%H:%M')
+                    
+                    slider.save()
+                    messages.success(request, 'Slider added successfully!')
+                except Exception as e:
+                    messages.error(request, f'Error adding slider: {str(e)}')
+            else:
+                messages.error(request, 'Title and image are required.')
+        
+        elif action == 'delete':
+            slider_id = request.POST.get('slider_id')
+            try:
+                slider = Slider.objects.get(id=slider_id)
+                # Delete the image file
+                if slider.image:
+                    slider.image.delete()
+                slider.delete()
+                messages.success(request, 'Slider deleted successfully!')
+            except Slider.DoesNotExist:
+                messages.error(request, 'Slider not found.')
+        
+        elif action == 'toggle':
+            slider_id = request.POST.get('slider_id')
+            try:
+                slider = Slider.objects.get(id=slider_id)
+                slider.is_active = not slider.is_active
+                slider.save()
+                status = 'activated' if slider.is_active else 'deactivated'
+                messages.success(request, f'Slider {status} successfully!')
+            except Slider.DoesNotExist:
+                messages.error(request, 'Slider not found.')
+        
+        elif action == 'update_order':
+            slider_id = request.POST.get('slider_id')
+            new_order = request.POST.get('new_order')
+            try:
+                slider = Slider.objects.get(id=slider_id)
+                slider.display_order = int(new_order)
+                slider.save()
+                messages.success(request, 'Slider order updated successfully!')
+            except Slider.DoesNotExist:
+                messages.error(request, 'Slider not found.')
+            except ValueError:
+                messages.error(request, 'Invalid order value.')
+        
+        return redirect('manage_sliders')
+    
+    sliders = Slider.objects.all().order_by('display_order', 'created_at')
+    context = {
+        'sliders': sliders,
+    }
+    return render(request, 'accounts/manage_sliders.html', context)
+
+@login_required
+def manage_push_notifications(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'send':
+            title = request.POST.get('title')
+            message = request.POST.get('message')
+            recipient_type = request.POST.get('recipient_type')
+            scheduled_time = request.POST.get('scheduled_time')
+            
+            if title and message:
+                try:
+                    notification = PushNotification.objects.create(
+                        title=title,
+                        message=message,
+                        recipient_type=recipient_type,
+                        created_by=request.user
+                    )
+                    
+                    if scheduled_time:
+                        from datetime import datetime
+                        notification.scheduled_time = datetime.strptime(scheduled_time, '%Y-%m-%dT%H:%M')
+                        notification.status = 'scheduled'
+                    else:
+                        notification.status = 'sent'
+                        notification.sent_at = timezone.now()
+                        # Here you would integrate with your push notification service
+                        # For now, we'll simulate sending
+                        if recipient_type == 'customer':
+                            notification.sent_count = CustomUser.objects.filter(user_type='customer').count()
+                        elif recipient_type == 'vendor':
+                            notification.sent_count = CustomUser.objects.filter(user_type='vendor').count()
+                        else:
+                            notification.sent_count = CustomUser.objects.exclude(user_type='superuser').count()
+                    
+                    notification.save()
+                    
+                    if notification.status == 'sent':
+                        messages.success(request, f'Notification sent to {notification.sent_count} users!')
+                    else:
+                        messages.success(request, 'Notification scheduled successfully!')
+                        
+                except Exception as e:
+                    messages.error(request, f'Error sending notification: {str(e)}')
+            else:
+                messages.error(request, 'Title and message are required.')
+        
+        elif action == 'delete':
+            notification_id = request.POST.get('notification_id')
+            try:
+                PushNotification.objects.get(id=notification_id).delete()
+                messages.success(request, 'Notification deleted successfully!')
+            except PushNotification.DoesNotExist:
+                messages.error(request, 'Notification not found.')
+        
+        return redirect('manage_push_notifications')
+    
+    notifications = PushNotification.objects.all().order_by('-created_at')
+    context = {
+        'notifications': notifications,
+    }
+    return render(request, 'accounts/manage_push_notifications.html', context)
+
+@login_required
+def admin_messages(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    user_type = request.GET.get('type', 'all')
+    
+    # Get all conversations and ensure superadmin is added to them
+    all_conversations = Conversation.objects.all().order_by('-updated_at')
+    
+    # Add superadmin to conversations if not already added
+    for conv in all_conversations:
+        if not conv.participants.filter(id=request.user.id).exists():
+            conv.participants.add(request.user)
+    
+    # Get unique users who have conversations with superadmin
+    user_conversations = {}
+    conversations = Conversation.objects.filter(participants=request.user).order_by('-updated_at')
+    
+    for conv in conversations:
+        other_users = conv.participants.exclude(id=request.user.id)
+        for user in other_users:
+            # Filter by user type if specified
+            if user_type == 'customer' and user.user_type != 'customer':
+                continue
+            elif user_type == 'vendor' and user.user_type != 'vendor':
+                continue
+            
+            # Keep only the latest conversation for each user
+            if user.id not in user_conversations or conv.updated_at > user_conversations[user.id]['conversation'].updated_at:
+                user_conversations[user.id] = {
+                    'user': user,
+                    'conversation': conv
+                }
+    
+    # Sort by latest message time
+    sorted_conversations = sorted(user_conversations.values(), key=lambda x: x['conversation'].updated_at, reverse=True)
+    
+    context = {
+        'user_conversations': sorted_conversations,
+        'user_type': user_type,
+    }
+    return render(request, 'accounts/admin_messages.html', context)
+
+@login_required
+def admin_conversation(request, conversation_id):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    conversation = get_object_or_404(Conversation, id=conversation_id)
+    
+    # Add superadmin to conversation if not already added
+    if not conversation.participants.filter(id=request.user.id).exists():
+        conversation.participants.add(request.user)
+    
+    # Handle AJAX request for new messages
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        last_message_count = int(request.GET.get('last_count', 0))
+        current_messages = conversation.messages.all().order_by('created_at')
+        
+        if current_messages.count() > last_message_count:
+            new_messages = current_messages[last_message_count:]
+            messages_data = []
+            
+            for msg in new_messages:
+                status_icon = ''
+                if msg.sender == request.user:
+                    if msg.status == 'sent':
+                        status_icon = '<i class="fas fa-check"></i>'
+                    elif msg.status == 'delivered':
+                        status_icon = '<i class="fas fa-check-double"></i>'
+                    elif msg.status == 'read':
+                        status_icon = '<i class="fas fa-check-double text-primary"></i>'
+                
+                messages_data.append({
+                    'content': msg.content,
+                    'created_at': msg.created_at.strftime('%b %d, %H:%M'),
+                    'is_sent': msg.sender == request.user,
+                    'status_icon': status_icon,
+                    'status_display': msg.get_status_display() if msg.sender == request.user else ''
+                })
+            
+            return JsonResponse({'new_messages': messages_data})
+        
+        return JsonResponse({'new_messages': []})
+    
+    messages_list = conversation.messages.all().order_by('created_at')[:50]
+    
+    # Mark messages as read
+    for message in messages_list:
+        if not message.read_by.filter(user=request.user).exists():
+            MessageRead.objects.get_or_create(message=message, user=request.user)
+    
+    # Get other participant (not superadmin)
+    other_participant = conversation.participants.exclude(id=request.user.id).first()
+    
+    # Send message if POST
+    if request.method == 'POST':
+        content = request.POST.get('content')
+        if content:
+            message = Message.objects.create(
+                conversation=conversation,
+                sender=request.user,
+                content=content,
+                status='sent'
+            )
+            conversation.updated_at = timezone.now()
+            conversation.save()
+            
+            # Trigger notification for other participants
+            from django.core.cache import cache
+            cache.set(f'new_message_{conversation.id}', {
+                'sender': request.user.username,
+                'content': content,
+                'timestamp': timezone.now().isoformat(),
+                'play_sound': True
+            }, 60)  # Cache for 1 minute
+            
+            return redirect('admin_conversation', conversation_id=conversation_id)
+    
+    context = {
+        'conversation': conversation,
+        'messages': messages_list,
+        'other_participant': other_participant,
+    }
+    return render(request, 'accounts/admin_conversation.html', context)
+
+@login_required
+def user_profile_details(request, user_id):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    user = get_object_or_404(CustomUser, id=user_id)
+    
+    # Get user's orders (as customer)
+    customer_orders = Order.objects.filter(customer=user).order_by('-created_at')[:10]
+    
+    # Get vendor orders if user is vendor
+    vendor_orders = []
+    if user.user_type == 'vendor' and hasattr(user, 'vendor_profile'):
+        vendor_orders = Order.objects.filter(vendor=user.vendor_profile).order_by('-created_at')[:10]
+    
+    # Get payment transactions
+    all_orders = list(customer_orders) + list(vendor_orders)
+    transactions = PaymentTransaction.objects.filter(
+        order__in=all_orders
+    ).order_by('-created_at')[:10]
+    
+    # Get wallet info if vendor
+    wallet = None
+    if user.user_type == 'vendor' and hasattr(user, 'vendor_profile'):
+        wallet = getattr(user.vendor_profile, 'wallet', None)
+    
+    context = {
+        'profile_user': user,
+        'customer_orders': customer_orders,
+        'vendor_orders': vendor_orders,
+        'transactions': transactions,
+        'wallet': wallet,
+    }
+    return render(request, 'accounts/user_profile_details.html', context)
 
 def api_docs(request):
     return render(request, 'accounts/api_docs.html')

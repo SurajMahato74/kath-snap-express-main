@@ -14,11 +14,11 @@ urlpatterns = [
     path('messages/<int:message_id>/pin/', message_views.toggle_pin_message_api, name='toggle_pin_message'),
     path('messages/<int:message_id>/image/', message_views.message_image_api, name='message_image'),
     
-    # Call APIs
-    path('calls/initiate/', message_views.initiate_call_api, name='initiate_call'),
-    path('calls/<int:call_id>/answer/', message_views.answer_call_api, name='answer_call'),
-    path('calls/<int:call_id>/end/', message_views.end_call_api, name='end_call'),
-    path('calls/<int:call_id>/decline/', message_views.decline_call_api, name='decline_call'),
-    path('calls/incoming/', message_views.incoming_calls_api, name='incoming_calls'),
-    path('calls/history/', message_views.CallHistoryView.as_view(), name='call_history'),
+    # Call APIs - DISABLED
+    # path('calls/initiate/', message_views.initiate_call_api, name='initiate_call'),
+    # path('calls/<int:call_id>/answer/', message_views.answer_call_api, name='answer_call'),
+    # path('calls/<int:call_id>/end/', message_views.end_call_api, name='end_call'),
+    # path('calls/<int:call_id>/decline/', message_views.decline_call_api, name='decline_call'),
+    # path('calls/incoming/', message_views.incoming_calls_api, name='incoming_calls'),
+    # path('calls/history/', message_views.CallHistoryView.as_view(), name='call_history'),
 ]

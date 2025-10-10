@@ -1,0 +1,269 @@
+{% extends 'accounts/superadmin_base.html' %}
+
+{% block title %}{{ profile_user.username }} - Profile Details{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div class="d-flex align-items-center">
+        <a href="javascript:history.back()" class="btn btn-outline-secondary me-3">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="h2 mb-0"><i class="fas fa-user me-2"></i>{{ profile_user.username }}</h1>
+    </div>
+</div>
+
+<!-- User Profile Card -->
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="user-avatar mx-auto mb-3" style="width: 80px; height: 80px; background: linear-gradient(45deg, #007bff, #0056b3); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 2rem; font-weight: bold;">
+                    {{ profile_user.username|first|upper }}
+                </div>
+                <h5 class="card-title">{{ profile_user.username }}</h5>
+                <span class="badge bg-{% if profile_user.user_type == 'customer' %}primary{% elif profile_user.user_type == 'vendor' %}warning{% else %}secondary{% endif %} mb-3">
+                    {{ profile_user.get_user_type_display }}
+                </span>
+                
+                <div class="text-start">
+                    <p class="mb-2"><strong>Email:</strong> 
+                        {% if profile_user.email %}
+                            <a href="mailto:{{ profile_user.email }}">{{ profile_user.email }}</a>
+                        {% else %}
+                            <span class="text-danger">Required - Not provided</span>
+                        {% endif %}
+                    </p>
+                    <p class="mb-2"><strong>Phone:</strong> 
+                        {% if profile_user.phone_number %}
+                            <a href="tel:{{ profile_user.phone_number }}">{{ profile_user.phone_number }}</a>
+                        {% else %}
+                            <span class="text-danger">Required - Not provided</span>
+                        {% endif %}
+                    </p>
+                    <p class="mb-2"><strong>Joined:</strong> {{ profile_user.date_joined|date:"M d, Y" }}</p>
+                    <p class="mb-2"><strong>Last Login:</strong> {{ profile_user.last_login|timesince|default:"Never" }} ago</p>
+                    <p class="mb-2">
+                        <strong>Status:</strong> 
+                        {% if profile_user.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </p>
+                    {% if profile_user.user_type == 'vendor' and profile_user.vendor_profile %}
+                        <p class="mb-2"><strong>Business:</strong> {{ profile_user.vendor_profile.business_name }}</p>
+                        <p class="mb-2"><strong>Business Type:</strong> {{ profile_user.vendor_profile.get_business_type_display }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Wallet Info (for vendors) -->
+        {% if wallet %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-wallet me-2"></i>Wallet Information</h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-12 mb-2">
+                        <h4 class="text-success">₹{{ wallet.balance }}</h4>
+                        <small class="text-muted">Current Balance</small>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-primary">₹{{ wallet.total_earned }}</h6>
+                        <small class="text-muted">Total Earned</small>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-danger">₹{{ wallet.total_spent }}</h6>
+                        <small class="text-muted">Total Spent</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-8">
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-primary">{{ customer_orders|length }}</h5>
+                        <p class="card-text">Orders Placed</p>
+                    </div>
+                </div>
+            </div>
+            {% if vendor_orders %}
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">{{ vendor_orders|length }}</h5>
+                        <p class="card-text">Orders Received</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-info">{{ transactions|length }}</h5>
+                        <p class="card-text">Transactions</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-warning">
+                            {% for order in customer_orders %}{{ order.total_amount|add:0 }}{% empty %}0{% endfor %}
+                        </h5>
+                        <p class="card-text">Total Spent</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Orders as Customer -->
+        {% if customer_orders %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Recent Orders (as Customer)</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Order #</th>
+                                <th>Vendor</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in customer_orders %}
+                            <tr>
+                                <td><strong>{{ order.order_number }}</strong></td>
+                                <td>{{ order.vendor.business_name }}</td>
+                                <td class="text-success">₹{{ order.total_amount }}</td>
+                                <td>
+                                    <span class="badge bg-{% if order.status == 'delivered' %}success{% elif order.status == 'cancelled' %}danger{% elif order.status == 'pending' %}warning{% else %}info{% endif %}">
+                                        {{ order.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ order.created_at|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Orders as Vendor -->
+        {% if vendor_orders %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-store me-2"></i>Recent Orders (as Vendor)</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Order #</th>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in vendor_orders %}
+                            <tr>
+                                <td><strong>{{ order.order_number }}</strong></td>
+                                <td>{{ order.customer.username }}</td>
+                                <td class="text-success">₹{{ order.total_amount }}</td>
+                                <td>
+                                    <span class="badge bg-{% if order.status == 'delivered' %}success{% elif order.status == 'cancelled' %}danger{% elif order.status == 'pending' %}warning{% else %}info{% endif %}">
+                                        {{ order.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ order.created_at|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Transactions -->
+        {% if transactions %}
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-credit-card me-2"></i>Recent Transactions</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Order #</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in transactions %}
+                            <tr>
+                                <td>
+                                    <strong>{{ transaction.order.order_number }}</strong>
+                                    {% if transaction.transaction_type == 'refund' %}
+                                        <br><small class="text-muted">Refund for Order</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if transaction.transaction_type == 'payment' %}primary{% elif transaction.transaction_type == 'refund' %}warning{% else %}info{% endif %}">
+                                        {{ transaction.get_transaction_type_display }}
+                                    </span>
+                                </td>
+                                <td class="{% if transaction.transaction_type == 'refund' %}text-warning{% else %}text-success{% endif %}">₹{{ transaction.amount }}</td>
+                                <td>{{ transaction.get_payment_method_display }}</td>
+                                <td>
+                                    <span class="badge bg-{% if transaction.status == 'completed' %}success{% elif transaction.status == 'failed' %}danger{% elif transaction.status == 'pending' %}warning{% else %}info{% endif %}">
+                                        {{ transaction.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ transaction.created_at|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- No Data Message -->
+        {% if not customer_orders and not vendor_orders and not transactions %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">No Transaction History</h5>
+                <p class="text-muted">This user hasn't made any orders or transactions yet.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

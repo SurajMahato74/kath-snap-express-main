@@ -1,5 +1,7 @@
 from django.urls import path, include
 from . import api_views, notification_views
+from .notification_api import check_notifications
+from .broadcast_api import broadcast_message
 
 urlpatterns = [
     # Test API
@@ -102,4 +104,13 @@ urlpatterns = [
     path('notifications/mark-all-read/', notification_views.mark_all_notifications_read, name='api_mark_all_notifications_read'),
     path('notifications/count/', notification_views.notification_count, name='api_notification_count'),
     path('notifications/status/', api_views.notification_status_api, name='api_notification_status'),
+    
+    # Slider APIs
+    path('sliders/', api_views.get_sliders_api, name='api_get_sliders'),
+    
+    # Real-time notification check
+    path('notifications/check/', check_notifications, name='api_check_notifications'),
+    
+    # Cross-domain message broadcasting
+    path('broadcast/', broadcast_message, name='api_broadcast_message'),
 ]

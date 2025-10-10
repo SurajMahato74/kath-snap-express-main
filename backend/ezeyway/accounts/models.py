@@ -519,5 +519,103 @@ class ChargeRate(models.Model):
 # Import order models
 from .order_models import *
 
+class FeaturedProductPackage(models.Model):
+    PACKAGE_TYPE_CHOICES = [
+        ('basic', 'Basic'),
+        ('premium', 'Premium'),
+        ('gold', 'Gold'),
+        ('platinum', 'Platinum'),
+    ]
+    
+    name = models.CharField(max_length=100, help_text="Package name (e.g., '10 Days Basic')")
+    duration_days = models.PositiveIntegerField(help_text="Duration in days")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Package price in rupees")
+    package_type = models.CharField(max_length=20, choices=PACKAGE_TYPE_CHOICES, default='basic')
+    description = models.TextField(blank=True, null=True, help_text="Package description")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['duration_days', 'amount']
+        verbose_name = "Featured Product Package"
+        verbose_name_plural = "Featured Product Packages"
+    
+    def __str__(self):
+        return f"{self.name} - ₹{self.amount} for {self.duration_days} days"
+
+def slider_upload_path(instance, filename):
+    return f'sliders/{filename}'
+
+class Slider(models.Model):
+    VISIBILITY_CHOICES = [
+        ('customer', 'Customer Side Only'),
+        ('vendor', 'Vendor Side Only'),
+        ('both', 'Both Customer & Vendor'),
+    ]
+    
+    title = models.CharField(max_length=200, help_text="Slider title")
+    description = models.TextField(blank=True, null=True, help_text="Optional slider description")
+    image = models.ImageField(upload_to=slider_upload_path, help_text="Upload slider image (GIF, PNG, SVG, JPEG)")
+    link_url = models.URLField(blank=True, null=True, help_text="Optional link when slider is clicked")
+    visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='both')
+    display_order = models.PositiveIntegerField(default=0, help_text="Display order (0 = first, higher numbers = later)")
+    is_active = models.BooleanField(default=True)
+    start_date = models.DateTimeField(blank=True, null=True, help_text="Optional start date for slider")
+    end_date = models.DateTimeField(blank=True, null=True, help_text="Optional end date for slider")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['display_order', 'created_at']
+        verbose_name = "Slider"
+        verbose_name_plural = "Sliders"
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_visibility_display()})"
+    
+    @property
+    def is_currently_active(self):
+        """Check if slider is active and within date range"""
+        if not self.is_active:
+            return False
+        
+        now = timezone.now()
+        if self.start_date and now < self.start_date:
+            return False
+        if self.end_date and now > self.end_date:
+            return False
+        
+        return True
+
+class PushNotification(models.Model):
+    RECIPIENT_CHOICES = [
+        ('customer', 'Customers Only'),
+        ('vendor', 'Vendors Only'),
+        ('both', 'Both Customers & Vendors'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('sent', 'Sent'),
+        ('scheduled', 'Scheduled'),
+    ]
+    
+    title = models.CharField(max_length=100, help_text="Notification title")
+    message = models.TextField(max_length=500, help_text="Notification message")
+    recipient_type = models.CharField(max_length=20, choices=RECIPIENT_CHOICES, default='both')
+    scheduled_time = models.DateTimeField(blank=True, null=True, help_text="Send immediately if empty")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    sent_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.get_recipient_type_display()}"
+
 # Import message models
 from .message_models import *

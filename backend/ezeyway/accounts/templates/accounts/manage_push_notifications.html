@@ -1,0 +1,231 @@
+{% extends 'accounts/superadmin_base.html' %}
+
+{% block title %}Push Notifications{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-bell me-2"></i>Push Notifications</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sendNotificationModal">
+        <i class="fas fa-paper-plane me-2"></i>Send Notification
+    </button>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-primary">{{ notifications|length }}</h5>
+                <p class="card-text">Total Sent</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-success">
+                    {% for notif in notifications %}{% if notif.status == 'sent' %}{{ forloop.counter0|add:1 }}{% endif %}{% empty %}0{% endfor %}
+                </h5>
+                <p class="card-text">Delivered</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-warning">
+                    {% for notif in notifications %}{% if notif.status == 'scheduled' %}{{ forloop.counter0|add:1 }}{% endif %}{% empty %}0{% endfor %}
+                </h5>
+                <p class="card-text">Scheduled</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-info">
+                    {% for notif in notifications %}{{ notif.sent_count|add:0 }}{% empty %}0{% endfor %}
+                </h5>
+                <p class="card-text">Total Reach</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notifications History -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-history me-2"></i>Notification History</h5>
+    </div>
+    <div class="card-body">
+        {% if notifications %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Title</th>
+                            <th>Message</th>
+                            <th>Recipients</th>
+                            <th>Status</th>
+                            <th>Sent Count</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for notification in notifications %}
+                            <tr>
+                                <td>
+                                    <strong>{{ notification.title }}</strong>
+                                </td>
+                                <td>
+                                    <span class="text-muted">{{ notification.message|truncatechars:50 }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if notification.recipient_type == 'customer' %}primary{% elif notification.recipient_type == 'vendor' %}warning{% else %}success{% endif %}">
+                                        {{ notification.get_recipient_type_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if notification.status == 'sent' %}success{% elif notification.status == 'scheduled' %}warning{% else %}secondary{% endif %}">
+                                        {{ notification.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <strong class="text-success">{{ notification.sent_count }}</strong>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {% if notification.sent_at %}
+                                            {{ notification.sent_at|date:"M d, Y H:i" }}
+                                        {% elif notification.scheduled_time %}
+                                            {{ notification.scheduled_time|date:"M d, Y H:i" }}
+                                        {% else %}
+                                            {{ notification.created_at|date:"M d, Y H:i" }}
+                                        {% endif %}
+                                    </small>
+                                </td>
+                                <td>
+                                    <form method="post" class="d-inline" onsubmit="return confirm('Delete this notification?')">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="notification_id" value="{{ notification.id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-bell-slash fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">No Notifications Sent</h5>
+                <p class="text-muted">Send your first push notification to get started.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sendNotificationModal">
+                    <i class="fas fa-paper-plane me-2"></i>Send First Notification
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Send Notification Modal -->
+<div class="modal fade" id="sendNotificationModal" tabindex="-1" aria-labelledby="sendNotificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sendNotificationModalLabel">
+                    <i class="fas fa-paper-plane me-2"></i>Send Push Notification
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="send">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="title" class="form-label">Title *</label>
+                            <input type="text" class="form-control" id="title" name="title" maxlength="100" required placeholder="Notification title">
+                            <div class="form-text">Maximum 100 characters</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="recipient_type" class="form-label">Send To *</label>
+                            <select class="form-select" id="recipient_type" name="recipient_type" required>
+                                <option value="both">Both Customers & Vendors</option>
+                                <option value="customer">Customers Only</option>
+                                <option value="vendor">Vendors Only</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="message" class="form-label">Message *</label>
+                        <textarea class="form-control" id="message" name="message" rows="3" maxlength="500" required placeholder="Your notification message..."></textarea>
+                        <div class="form-text">Maximum 500 characters</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="scheduled_time" class="form-label">Schedule (Optional)</label>
+                        <input type="datetime-local" class="form-control" id="scheduled_time" name="scheduled_time">
+                        <div class="form-text">Leave empty to send immediately</div>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Preview:</strong> Your notification will appear on users' devices with the title and message you specify above.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane me-2"></i>Send Notification
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Character counter for title
+    const titleInput = document.getElementById('title');
+    const messageInput = document.getElementById('message');
+    
+    function updateCharCount(input, maxLength) {
+        const remaining = maxLength - input.value.length;
+        const helpText = input.nextElementSibling;
+        helpText.textContent = `${remaining} characters remaining`;
+        helpText.className = remaining < 20 ? 'form-text text-warning' : 'form-text';
+    }
+    
+    titleInput.addEventListener('input', () => updateCharCount(titleInput, 100));
+    messageInput.addEventListener('input', () => updateCharCount(messageInput, 500));
+    
+    // Reset form when modal closes
+    document.getElementById('sendNotificationModal').addEventListener('hidden.bs.modal', function() {
+        document.querySelector('#sendNotificationModal form').reset();
+        titleInput.nextElementSibling.textContent = 'Maximum 100 characters';
+        messageInput.nextElementSibling.textContent = 'Maximum 500 characters';
+    });
+});
+</script>
+{% endblock %}

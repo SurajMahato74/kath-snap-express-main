@@ -28,6 +28,12 @@ urlpatterns = [
     path('superadmin/categories/', views.manage_categories, name='manage_categories'),
     path('superadmin/delivery-radius/', views.manage_delivery_radius, name='manage_delivery_radius'),
     path('superadmin/initial-wallet-points/', views.manage_initial_wallet_points, name='manage_initial_wallet_points'),
+    path('superadmin/featured-packages/', views.manage_featured_packages, name='manage_featured_packages'),
+    path('superadmin/sliders/', views.manage_sliders, name='manage_sliders'),
+    path('superadmin/push-notifications/', views.manage_push_notifications, name='manage_push_notifications'),
+    path('superadmin/messages/', views.admin_messages, name='admin_messages'),
+    path('superadmin/messages/<int:conversation_id>/', views.admin_conversation, name='admin_conversation'),
+    path('superadmin/user-profile/<int:user_id>/', views.user_profile_details, name='user_profile_details'),
     
     # Vendor Wallet
     path('vendor/wallet/', views.vendor_wallet_view, name='vendor_wallet'),
