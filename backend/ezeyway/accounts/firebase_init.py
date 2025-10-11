@@ -73,49 +73,43 @@ def send_fcm_message(token, title, body, data=None):
         return False
 
 def send_data_only_message(token, data):
-    """Send FCM message that auto-opens app without user tap"""
+    """Send high priority FCM message that forces app to open"""
     try:
         if not firebase_admin._apps:
             if not initialize_firebase():
                 return False
         
-        # Send data-only message for background auto-open
-        data_message = messaging.Message(
-            data={
-                **data,
-                "autoLaunch": "true",
-                "forceOpen": "true",
-                "background": "true"
-            },
-            token=token,
-            android=messaging.AndroidConfig(
-                priority='high'
-            )
-        )
-        
-        # Send notification for user awareness (but app opens automatically)
-        notification_message = messaging.Message(
+        # Send high priority message with notification to force wake up
+        message = messaging.Message(
             notification=messaging.Notification(
-                title="New Order Received!",
+                title="New Order Alert!",
                 body=f"Order #{data.get('orderNumber', 'N/A')} - ₹{data.get('amount', '0')}"
             ),
-            data=data,
+            data={
+                **data,
+                "autoOpen": "true",
+                "autoLaunch": "true", 
+                "forceOpen": "true",
+                "priority": "high",
+                "wake_app": "true"
+            },
             token=token,
             android=messaging.AndroidConfig(
                 priority='high',
                 notification=messaging.AndroidNotification(
                     sound='default',
-                    channel_id='order_notifications'
-                )
+                    channel_id='order_notifications',
+                    priority=messaging.Priority.HIGH,
+                    default_sound=True,
+                    default_vibrate_timings=True
+                ),
+                ttl=0,
+                collapse_key='order_alert'
             )
         )
         
-        # Send both messages
-        response1 = messaging.send(data_message)
-        response2 = messaging.send(notification_message)
-        
-        print(f"Auto-launch message sent: {response1}")
-        print(f"Notification sent: {response2}")
+        response = messaging.send(message)
+        print(f"High priority auto-open message sent: {response}")
         return True
         
     except Exception as e:
