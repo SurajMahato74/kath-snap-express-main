@@ -114,6 +114,9 @@ urlpatterns = [
     # Test FCM Notification
     path('test-fcm-notification/', api_views.test_fcm_notification_api, name='api_test_fcm_notification'),
     
+    # Test Auto-Open Notification
+    path('notifications/test-auto-open/', notification_views.test_auto_open_notification, name='api_test_auto_open_notification'),
+    
     # Real-time notification check
     path('notifications/check/', check_notifications, name='api_check_notifications'),
     
