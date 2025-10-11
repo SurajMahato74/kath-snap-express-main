@@ -41,7 +41,7 @@ def fix_firebase():
         print(f"✅ Firebase initialized successfully: {app.name}")
         
         # Test sending a message
-        test_token = "c5EatI4yQPW6p7KjHDsSXu:APA916F..."  # Your token
+        test_token = "c5EatI4yQPW6p7KjHDsSXu:APA91bF0XRUWOs786de6AOPap9z5I5VB8k6nKOcHGzoWiGr6fzd7aQ8j3Xxxnbc7QvSY07C_Ykl6mBQZo_BvfNMo0zRM7WPb4RXmS4Bx_rRT5utf2b6QI8o"  # Your actual FCM token
         
         message = messaging.Message(
             data={
