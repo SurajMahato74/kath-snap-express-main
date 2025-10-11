@@ -73,13 +73,28 @@ def send_fcm_message(token, title, body, data=None):
         return False
 
 def send_data_only_message(token, data):
-    """Send FCM message with notification for auto-opening app"""
+    """Send FCM message that auto-opens app without user tap"""
     try:
         if not firebase_admin._apps:
             if not initialize_firebase():
                 return False
-                
-        message = messaging.Message(
+        
+        # Send data-only message for background auto-open
+        data_message = messaging.Message(
+            data={
+                **data,
+                "autoLaunch": "true",
+                "forceOpen": "true",
+                "background": "true"
+            },
+            token=token,
+            android=messaging.AndroidConfig(
+                priority='high'
+            )
+        )
+        
+        # Send notification for user awareness (but app opens automatically)
+        notification_message = messaging.Message(
             notification=messaging.Notification(
                 title="New Order Received!",
                 body=f"Order #{data.get('orderNumber', 'N/A')} - ₹{data.get('amount', '0')}"
@@ -90,15 +105,17 @@ def send_data_only_message(token, data):
                 priority='high',
                 notification=messaging.AndroidNotification(
                     sound='default',
-                    click_action='FLUTTER_NOTIFICATION_CLICK',
                     channel_id='order_notifications'
-                ),
-                data=data
+                )
             )
         )
         
-        response = messaging.send(message)
-        print(f"Auto-open FCM message sent: {response}")
+        # Send both messages
+        response1 = messaging.send(data_message)
+        response2 = messaging.send(notification_message)
+        
+        print(f"Auto-launch message sent: {response1}")
+        print(f"Notification sent: {response2}")
         return True
         
     except Exception as e:
