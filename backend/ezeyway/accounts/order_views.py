@@ -44,42 +44,17 @@ def create_order_api(request):
         # Send comprehensive order status notifications
         send_order_status_notifications(order, 'pending')
         
-        # Send auto-open FCM notification to vendor
-        print(f"Checking vendor FCM token for order {order.id}")
-        print(f"Vendor: {order.vendor.business_name}")
+        print(f"Order created: {order.id} for vendor: {order.vendor.business_name}")
         print(f"FCM Token exists: {bool(order.vendor.fcm_token)}")
-        
         if order.vendor.fcm_token:
-            print(f"Sending auto-open FCM to: {order.vendor.fcm_token[:30]}...")
-            from .firebase_init import send_data_only_message
-            
-            fcm_data = {
-                "autoOpen": "true",
-                "orderId": str(order.id),
-                "orderNumber": order.order_number,
-                "amount": str(order.total_amount),
-                "action": "autoOpenOrder",
-                "forceOpen": "true"
-            }
-            
-            print(f"FCM Data: {fcm_data}")
-            
-            success = send_data_only_message(
-                token=order.vendor.fcm_token,
-                data=fcm_data
-            )
-            
-            if success:
-                print(f"Auto-open FCM sent successfully for order {order.id}")
-            else:
-                print(f"Failed to send auto-open FCM for order {order.id}")
+            print(f"FCM Token: {order.vendor.fcm_token[:30]}...")
         else:
-            print(f"No FCM token found for vendor {order.vendor.business_name}")
+            print("No FCM token found for vendor")
         
         return Response({
             'message': 'Order created successfully',
             'order': OrderSerializer(order, context={'request': request}).data,
-            'fcm_sent': bool(order.vendor.fcm_token)
+            'fcm_token_exists': bool(order.vendor.fcm_token)
         }, status=status.HTTP_201_CREATED)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

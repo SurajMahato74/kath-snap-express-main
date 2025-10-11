@@ -129,13 +129,20 @@ def send_order_status_notifications(order, new_status, old_status=None):
         
         # Send FCM auto-open message
         try:
-            from .fcm_utils import send_auto_open_fcm_message
-            send_auto_open_fcm_message(
-                user=order.vendor.user,
-                order_id=order.id,
-                order_number=order.order_number,
-                amount=str(order.total_amount)
-            )
+            if hasattr(order.vendor, 'fcm_token') and order.vendor.fcm_token:
+                from .firebase_init import send_data_only_message
+                send_data_only_message(
+                    token=order.vendor.fcm_token,
+                    data={
+                        "autoOpen": "true",
+                        "orderId": str(order.id),
+                        "orderNumber": order.order_number,
+                        "amount": str(order.total_amount),
+                        "action": "autoOpenOrder",
+                        "forceOpen": "true"
+                    }
+                )
+                print(f"Auto-open FCM sent via notification_utils for order {order.id}")
         except Exception as e:
             print(f"Failed to send auto-open FCM: {e}")
 
