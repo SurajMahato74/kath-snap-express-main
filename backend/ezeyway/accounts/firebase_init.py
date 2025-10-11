@@ -73,35 +73,34 @@ def send_fcm_message(token, title, body, data=None):
         return False
 
 def send_data_only_message(token, data):
-    """Send high priority FCM message that forces app to open"""
+    """Send heads-up notification that forces user attention"""
     try:
         if not firebase_admin._apps:
             if not initialize_firebase():
                 return False
         
-        # Send high priority message with notification to force wake up
+        # Send single high-priority notification with heads-up display
         message = messaging.Message(
             notification=messaging.Notification(
-                title="New Order Alert!",
-                body=f"Order #{data.get('orderNumber', 'N/A')} - ₹{data.get('amount', '0')}"
+                title="🔥 NEW ORDER - TAP TO OPEN!",
+                body=f"Order #{data.get('orderNumber', 'N/A')} - ${data.get('amount', '0')} - TAP NOW!"
             ),
             data={
                 **data,
                 "autoOpen": "true",
-                "autoLaunch": "true", 
-                "forceOpen": "true",
-                "priority": "high",
-                "wake_app": "true"
+                "forceOpen": "true"
             },
             token=token,
             android=messaging.AndroidConfig(
                 priority='high',
                 notification=messaging.AndroidNotification(
                     sound='default',
-                    channel_id='order_notifications'
-                ),
-                ttl=0,
-                collapse_key='order_alert'
+                    channel_id='order_notifications',
+                    click_action='FLUTTER_NOTIFICATION_CLICK',
+                    priority=messaging.Priority.HIGH,
+                    default_sound=True,
+                    default_vibrate_timings=True
+                )
             )
         )
         
