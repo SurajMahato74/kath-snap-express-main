@@ -64,7 +64,7 @@ class FCMService:
             logger.error(traceback.format_exc())
 
     def send_order_notification(self, fcm_token, order_data):
-        """Send FCM notification for new order"""
+        """Send FCM data-only message to auto-open app for new order"""
         try:
             if not fcm_token:
                 logger.warning("No FCM token provided")
@@ -75,38 +75,46 @@ class FCMService:
                 logger.error("❌ Firebase not initialized")
                 return False
 
-            logger.info(f"📤 Sending FCM notification to token: {fcm_token[:20]}...")
+            logger.info(f"📤 Sending AUTO-OPEN FCM message to token: {fcm_token[:20]}...")
             logger.info(f"📊 Order data: {order_data}")
+            logger.info("🚀 This will AUTO-OPEN the app without user interaction!")
 
-            # Create notification message
+            # Send DATA-ONLY message to auto-open app without user interaction
             message = messaging.Message(
-                notification=messaging.Notification(
-                    title='🔔 NEW ORDER RECEIVED',
-                    body=f"Order #{order_data['orderNumber']} - ₹{order_data['amount']}"
-                ),
+                # NO notification field - this makes it a data-only message
                 data={
+                    'title': '🔔 NEW ORDER RECEIVED',
+                    'body': f"Order #{order_data['orderNumber']} - ₹{order_data['amount']}",
                     'orderId': str(order_data['orderId']),
                     'orderNumber': order_data['orderNumber'],
                     'amount': str(order_data['amount']),
-                    'action': 'openOrder',
-                    'autoOpen': 'true'
+                    'action': 'autoOpenOrder',
+                    'autoOpen': 'true',
+                    'forceOpen': 'true',
+                    'type': 'order_notification'
                 },
                 android=messaging.AndroidConfig(
                     priority='high',
-                    notification=messaging.AndroidNotification(
-                        channel_id='order_alerts',
-                        priority='high',
-                        default_sound=True,
-                        default_vibrate_timings=True,
-                        default_light_settings=True
-                    )
+                    # No notification config - data-only message
+                    data={
+                        'title': '🔔 NEW ORDER RECEIVED',
+                        'body': f"Order #{order_data['orderNumber']} - ₹{order_data['amount']}",
+                        'orderId': str(order_data['orderId']),
+                        'orderNumber': order_data['orderNumber'],
+                        'amount': str(order_data['amount']),
+                        'action': 'autoOpenOrder',
+                        'autoOpen': 'true',
+                        'forceOpen': 'true',
+                        'type': 'order_notification'
+                    }
                 ),
                 token=fcm_token
             )
 
-            # Send the message
+            # Send the data-only message
             response = messaging.send(message)
-            logger.info(f"✅ FCM notification sent successfully: {response}")
+            logger.info(f"✅ AUTO-OPEN FCM message sent successfully: {response}")
+            logger.info("🚀 App should auto-open now without user interaction!")
             return True
 
         except Exception as e:
