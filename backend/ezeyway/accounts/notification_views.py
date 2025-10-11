@@ -69,23 +69,35 @@ def notification_count(request):
 def test_auto_open_notification(request):
     """Test auto-open FCM notification"""
     try:
-        from .fcm_utils import send_auto_open_fcm_message, send_background_trigger
+        from .firebase_init import send_data_only_message
+        from .models import VendorProfile
+        
+        # Get vendor's FCM token
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user)
+            fcm_token = vendor_profile.fcm_token
+        except VendorProfile.DoesNotExist:
+            return Response(
+                {'error': 'Vendor profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if not fcm_token:
+            return Response(
+                {'error': 'FCM token not found. Please restart the app.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Send auto-open FCM message
-        success = send_auto_open_fcm_message(
-            user=request.user,
-            order_id=999,
-            order_number='TEST-AUTO-OPEN',
-            amount='500'
-        )
-        
-        # Also send background trigger
-        send_background_trigger(
-            user=request.user,
-            order_data={
-                'order_id': 999,
-                'order_number': 'TEST-AUTO-OPEN',
-                'amount': '500'
+        success = send_data_only_message(
+            token=fcm_token,
+            data={
+                "autoOpen": "true",
+                "orderId": "999",
+                "orderNumber": "TEST-AUTO-OPEN",
+                "amount": "500",
+                "action": "autoOpenOrder",
+                "forceOpen": "true"
             }
         )
         

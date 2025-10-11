@@ -1661,42 +1661,18 @@ def register_fcm_token_api(request):
 @permission_classes([permissions.IsAuthenticated])
 def test_fcm_notification_api(request):
     """Send test FCM notification to current vendor"""
-    import firebase_admin
-    import os
-    
-    debug_info = {
-        'firebase_apps': len(firebase_admin._apps),
-        'firebase_initialized': bool(firebase_admin._apps),
-    }
-    
     try:
         if not request.user.is_vendor:
             return Response({
-                'error': 'Only vendors can send test notifications',
-                'debug': debug_info
+                'error': 'Only vendors can send test notifications'
             }, status=status.HTTP_403_FORBIDDEN)
         
         vendor_profile = VendorProfile.objects.get(user=request.user)
-        debug_info['vendor_found'] = True
-        debug_info['fcm_token_exists'] = bool(vendor_profile.fcm_token)
-        debug_info['fcm_token_preview'] = vendor_profile.fcm_token[:30] + '...' if vendor_profile.fcm_token else None
         
         if not vendor_profile.fcm_token:
             return Response({
-                'error': 'No FCM token found. Please restart the app.',
-                'debug': debug_info
+                'error': 'No FCM token found. Please restart the app.'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check Firebase service account file
-        service_paths = [
-            '/home/ezeywayc/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
-            '/home/ezeywayc/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
-            './ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'
-        ]
-        
-        debug_info['service_account_paths'] = {}
-        for path in service_paths:
-            debug_info['service_account_paths'][path] = os.path.exists(path)
         
         # Get test data from request
         title = request.data.get('title', 'Test Notification')
@@ -1705,52 +1681,37 @@ def test_fcm_notification_api(request):
         order_number = request.data.get('orderNumber', 'TEST-999')
         amount = request.data.get('amount', '500')
         
-        debug_info['test_data'] = {
-            'title': title,
-            'message': message,
-            'order_id': order_id,
-            'order_number': order_number,
-            'amount': amount
-        }
-        
         # Send FCM notification
-        from .fcm_service import fcm_service
-        success = fcm_service.send_order_notification(
-            fcm_token=vendor_profile.fcm_token,
-            order_data={
-                'orderId': order_id,
-                'orderNumber': order_number,
-                'amount': amount
+        from .firebase_init import send_data_only_message
+        success = send_data_only_message(
+            token=vendor_profile.fcm_token,
+            data={
+                "autoOpen": "true",
+                "orderId": str(order_id),
+                "orderNumber": order_number,
+                "amount": str(amount),
+                "action": "autoOpenOrder",
+                "forceOpen": "true"
             }
         )
-        
-        debug_info['send_result'] = success
         
         if success:
             return Response({
                 'success': True,
-                'message': 'Test notification sent successfully!',
-                'debug': debug_info
+                'message': 'Test notification sent successfully!'
             })
         else:
             return Response({
-                'error': 'Failed to send notification - check server logs',
-                'debug': debug_info
+                'error': 'Failed to send notification'
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except VendorProfile.DoesNotExist:
-        debug_info['vendor_found'] = False
         return Response({
-            'error': 'Vendor profile not found',
-            'debug': debug_info
+            'error': 'Vendor profile not found'
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        import traceback
-        debug_info['exception'] = str(e)
-        debug_info['traceback'] = traceback.format_exc()
         return Response({
-            'error': str(e),
-            'debug': debug_info
+            'error': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])

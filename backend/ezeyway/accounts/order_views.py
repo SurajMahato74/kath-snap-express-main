@@ -44,15 +44,18 @@ def create_order_api(request):
         # Send comprehensive order status notifications
         send_order_status_notifications(order, 'pending')
         
-        # Send FCM push notification to vendor
-        from .fcm_service import fcm_service
+        # Send auto-open FCM notification to vendor
         if order.vendor.fcm_token:
-            fcm_service.send_order_notification(
-                fcm_token=order.vendor.fcm_token,
-                order_data={
-                    'orderId': order.id,
-                    'orderNumber': order.order_number,
-                    'amount': str(order.total_amount)
+            from .firebase_init import send_data_only_message
+            send_data_only_message(
+                token=order.vendor.fcm_token,
+                data={
+                    "autoOpen": "true",
+                    "orderId": str(order.id),
+                    "orderNumber": order.order_number,
+                    "amount": str(order.total_amount),
+                    "action": "autoOpenOrder",
+                    "forceOpen": "true"
                 }
             )
         
@@ -98,7 +101,22 @@ def cancel_order_api(request, order_id):
             product.save()
         
         # Send comprehensive order status notifications
-        send_order_status_notifications(order, 'cancelled', old_status)
+        send_order_status_notifications(order, 'cancelled')
+        
+        # Send auto-open FCM notification to vendor about cancellation
+        if order.vendor.fcm_token:
+            from .firebase_init import send_data_only_message
+            send_data_only_message(
+                token=order.vendor.fcm_token,
+                data={
+                    "autoOpen": "true",
+                    "orderId": str(order.id),
+                    "orderNumber": order.order_number,
+                    "status": "cancelled",
+                    "action": "orderCancelled",
+                    "forceOpen": "true"
+                }
+            )
         
         return Response({
             'message': 'Order cancelled successfully',
