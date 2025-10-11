@@ -98,10 +98,7 @@ def send_data_only_message(token, data):
                 priority='high',
                 notification=messaging.AndroidNotification(
                     sound='default',
-                    channel_id='order_notifications',
-                    priority=messaging.Priority.HIGH,
-                    default_sound=True,
-                    default_vibrate_timings=True
+                    channel_id='order_notifications'
                 ),
                 ttl=0,
                 collapse_key='order_alert'
