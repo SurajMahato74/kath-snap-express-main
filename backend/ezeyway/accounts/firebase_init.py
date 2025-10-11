@@ -48,9 +48,9 @@ def send_fcm_message(token, data=None, notification=None):
             if not initialize_firebase():
                 return False
                 
-        # Always send notification part for system display
+        # Send notification that works when app is closed
         title = notification.get('title', '🔥 NEW ORDER!') if notification else '🔥 NEW ORDER!'
-        body = notification.get('body', 'Tap to view order details') if notification else 'Tap to view order details'
+        body = notification.get('body', 'Tap to accept order') if notification else 'Tap to accept order'
         
         message = messaging.Message(
             notification=messaging.Notification(
@@ -64,7 +64,9 @@ def send_fcm_message(token, data=None, notification=None):
                 notification=messaging.AndroidNotification(
                     sound='default',
                     channel_id='order_notifications',
-                    click_action='FLUTTER_NOTIFICATION_CLICK'
+                    click_action='FLUTTER_NOTIFICATION_CLICK',
+                    default_sound=True,
+                    default_vibrate_timings=True
                 )
             )
         )
