@@ -168,7 +168,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
                 
                 notification_data = {
                     "title": f"🔥 NEW ORDER #{order.order_number}",
-                    "body": f"{customer_name} • ${order.total_amount}"
+                    "body": f"{customer_name} • ${order.total_amount} • {order_items}"
                 }
                 print(f"FCM Data: {fcm_data}")
                 

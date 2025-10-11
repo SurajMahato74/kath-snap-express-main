@@ -48,23 +48,23 @@ def send_fcm_message(token, data=None, notification=None):
             if not initialize_firebase():
                 return False
                 
-        fcm_notification = None
-        if notification:
-            fcm_notification = messaging.Notification(
-                title=notification.get('title', 'New Order'),
-                body=notification.get('body', 'You have a new order')
-            )
+        # Always send notification part for system display
+        title = notification.get('title', '🔥 NEW ORDER!') if notification else '🔥 NEW ORDER!'
+        body = notification.get('body', 'Tap to view order details') if notification else 'Tap to view order details'
         
         message = messaging.Message(
-            notification=fcm_notification,
+            notification=messaging.Notification(
+                title=title,
+                body=body
+            ),
             data=data or {},
             token=token,
             android=messaging.AndroidConfig(
                 priority='high',
                 notification=messaging.AndroidNotification(
-                    click_action='FLUTTER_NOTIFICATION_CLICK',
                     sound='default',
-                    channel_id='order_notifications'
+                    channel_id='order_notifications',
+                    click_action='FLUTTER_NOTIFICATION_CLICK'
                 )
             )
         )
