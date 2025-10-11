@@ -141,27 +141,34 @@ def send_order_status_notifications(order, new_status, old_status=None):
                 print(f"SENDING AUTO-OPEN FCM for order {order.id}")
                 from .firebase_init import send_data_only_message
                 
-                # Get order items for notification
-                order_items = ", ".join([f"{item.quantity}x {item.product.name}" for item in order.orderitem_set.all()[:3]])
-                if order.orderitem_set.count() > 3:
-                    order_items += "..."
+                try:
+                    # Get order items safely
+                    order_items = ", ".join([f"{item.quantity}x {item.product.name}" for item in order.orderitem_set.all()[:3]])
+                    if order.orderitem_set.count() > 3:
+                        order_items += "..."
+                except:
+                    order_items = "Order items"
+                
+                try:
+                    customer_name = order.customer.get_full_name() or order.customer.username
+                except:
+                    customer_name = "Customer"
                 
                 fcm_data = {
                     "autoOpen": "true",
                     "orderId": str(order.id),
                     "orderNumber": order.order_number,
-                    "customerName": order.customer.get_full_name() or order.customer.username,
+                    "customerName": customer_name,
                     "amount": str(order.total_amount),
                     "items": order_items,
-                    "address": getattr(order, 'delivery_address', 'Pickup'),
-                    "imageUrl": order.orderitem_set.first().product.image.url if order.orderitem_set.exists() and order.orderitem_set.first().product.image else "",
+                    "address": "Delivery address",
                     "action": "autoOpenOrder",
                     "forceOpen": "true"
                 }
                 
                 notification_data = {
                     "title": f"🔥 NEW ORDER #{order.order_number}",
-                    "body": f"{order.customer.get_full_name() or order.customer.username} • ${order.total_amount}"
+                    "body": f"{customer_name} • ${order.total_amount}"
                 }
                 print(f"FCM Data: {fcm_data}")
                 

@@ -41,25 +41,30 @@ def initialize_firebase():
         print(f"Firebase initialization failed: {e}")
         return False
 
-def send_fcm_message(token, title, body, data=None):
+def send_fcm_message(token, data=None, notification=None):
     """Send FCM message using Firebase Admin SDK"""
     try:
         if not firebase_admin._apps:
             if not initialize_firebase():
                 return False
                 
+        fcm_notification = None
+        if notification:
+            fcm_notification = messaging.Notification(
+                title=notification.get('title', 'New Order'),
+                body=notification.get('body', 'You have a new order')
+            )
+        
         message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
+            notification=fcm_notification,
             data=data or {},
             token=token,
             android=messaging.AndroidConfig(
                 priority='high',
                 notification=messaging.AndroidNotification(
                     click_action='FLUTTER_NOTIFICATION_CLICK',
-                    sound='default'
+                    sound='default',
+                    channel_id='order_notifications'
                 )
             )
         )
