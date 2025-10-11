@@ -8,7 +8,7 @@ def initialize_firebase():
     try:
         # Check if Firebase is already initialized
         if firebase_admin._apps:
-            print("✅ Firebase already initialized")
+            print("Firebase already initialized")
             return True
             
         # Try to find service account file
@@ -23,22 +23,22 @@ def initialize_firebase():
         for path in service_account_paths:
             if os.path.exists(path):
                 service_account_file = path
-                print(f"✅ Found service account file: {path}")
+                print(f"Found service account file: {path}")
                 break
         
         if not service_account_file:
-            print("❌ Firebase service account file not found")
+            print("Firebase service account file not found")
             return False
             
         # Initialize Firebase
         cred = credentials.Certificate(service_account_file)
         firebase_admin.initialize_app(cred)
         
-        print("✅ Firebase Admin SDK initialized successfully")
+        print("Firebase Admin SDK initialized successfully")
         return True
         
     except Exception as e:
-        print(f"❌ Firebase initialization failed: {e}")
+        print(f"Firebase initialization failed: {e}")
         return False
 
 def send_fcm_message(token, title, body, data=None):
@@ -65,11 +65,11 @@ def send_fcm_message(token, title, body, data=None):
         )
         
         response = messaging.send(message)
-        print(f"✅ FCM message sent successfully: {response}")
+        print(f"FCM message sent successfully: {response}")
         return True
         
     except Exception as e:
-        print(f"❌ Failed to send FCM message: {e}")
+        print(f"Failed to send FCM message: {e}")
         return False
 
 def send_data_only_message(token, data):
@@ -89,9 +89,9 @@ def send_data_only_message(token, data):
         )
         
         response = messaging.send(message)
-        print(f"✅ Data-only FCM message sent: {response}")
+        print(f"Data-only FCM message sent: {response}")
         return True
         
     except Exception as e:
-        print(f"❌ Failed to send data-only FCM: {e}")
+        print(f"Failed to send data-only FCM: {e}")
         return False
