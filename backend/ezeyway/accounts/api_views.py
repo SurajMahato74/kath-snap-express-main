@@ -1657,6 +1657,51 @@ def register_fcm_token_api(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def test_fcm_notification_api(request):
+    """Send test FCM notification to current vendor"""
+    try:
+        if not request.user.is_vendor:
+            return Response({'error': 'Only vendors can send test notifications'}, status=status.HTTP_403_FORBIDDEN)
+        
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        
+        if not vendor_profile.fcm_token:
+            return Response({'error': 'No FCM token found. Please restart the app.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get test data from request
+        title = request.data.get('title', 'Test Notification')
+        message = request.data.get('message', 'This is a test notification!')
+        order_id = request.data.get('orderId', 999)
+        order_number = request.data.get('orderNumber', 'TEST-999')
+        amount = request.data.get('amount', '500')
+        
+        # Send FCM notification
+        from .fcm_service import fcm_service
+        success = fcm_service.send_order_notification(
+            fcm_token=vendor_profile.fcm_token,
+            order_data={
+                'orderId': order_id,
+                'orderNumber': order_number,
+                'amount': amount
+            }
+        )
+        
+        if success:
+            return Response({
+                'success': True,
+                'message': 'Test notification sent successfully!',
+                'token_preview': vendor_profile.fcm_token[:20] + '...'
+            })
+        else:
+            return Response({'error': 'Failed to send notification'}, status=status.HTTP_400_BAD_REQUEST)
+            
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def get_sliders_api(request):
