@@ -44,6 +44,18 @@ def create_order_api(request):
         # Send comprehensive order status notifications
         send_order_status_notifications(order, 'pending')
         
+        # Send FCM push notification to vendor
+        from .fcm_service import fcm_service
+        if order.vendor.fcm_token:
+            fcm_service.send_order_notification(
+                fcm_token=order.vendor.fcm_token,
+                order_data={
+                    'orderId': order.id,
+                    'orderNumber': order.order_number,
+                    'amount': str(order.total_amount)
+                }
+            )
+        
         return Response({
             'message': 'Order created successfully',
             'order': OrderSerializer(order, context={'request': request}).data

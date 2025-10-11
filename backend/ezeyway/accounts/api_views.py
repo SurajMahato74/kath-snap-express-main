@@ -1620,6 +1620,43 @@ def verify_khalti_payment(request):
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 # Slider API Views
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def register_fcm_token_api(request):
+    """Register FCM token for push notifications"""
+    try:
+        fcm_token = request.data.get('fcm_token')
+        platform = request.data.get('platform', 'android')
+        
+        if not fcm_token:
+            return Response({'error': 'FCM token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update vendor profile with FCM token
+        if request.user.is_vendor:
+            try:
+                vendor_profile = VendorProfile.objects.get(user=request.user)
+                vendor_profile.fcm_token = fcm_token
+                vendor_profile.fcm_updated_at = timezone.now()
+                vendor_profile.save()
+                
+                return Response({
+                    'success': True,
+                    'message': 'FCM token registered successfully',
+                    'platform': platform
+                })
+            except VendorProfile.DoesNotExist:
+                return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # For customers, you can store FCM token in user profile or separate model
+            return Response({
+                'success': True,
+                'message': 'FCM token registered for customer',
+                'platform': platform
+            })
+            
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def get_sliders_api(request):

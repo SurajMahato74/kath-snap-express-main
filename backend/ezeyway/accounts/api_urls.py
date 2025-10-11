@@ -108,6 +108,9 @@ urlpatterns = [
     # Slider APIs
     path('sliders/', api_views.get_sliders_api, name='api_get_sliders'),
     
+    # FCM Token Registration
+    path('register-fcm-token/', api_views.register_fcm_token_api, name='api_register_fcm_token'),
+    
     # Real-time notification check
     path('notifications/check/', check_notifications, name='api_check_notifications'),
     

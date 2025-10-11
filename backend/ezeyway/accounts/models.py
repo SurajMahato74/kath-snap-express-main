@@ -193,6 +193,10 @@ class VendorProfile(models.Model):
     status_override = models.BooleanField(default=False)  # Indicates if status is manually overridden
     status_override_date = models.DateField(blank=True, null=True)  # Date of the override
     
+    # FCM Token for push notifications
+    fcm_token = models.TextField(blank=True, null=True)  # Firebase Cloud Messaging token
+    fcm_updated_at = models.DateTimeField(blank=True, null=True)  # When FCM token was last updated
+    
     def __str__(self):
         return f"{self.business_name} - {self.user.username}"
 
