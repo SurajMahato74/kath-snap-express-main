@@ -128,23 +128,44 @@ def send_order_status_notifications(order, new_status, old_status=None):
         )
         
         # Send FCM auto-open message
+        print(f"🔥 NOTIFICATION_UTILS: Processing new order {order.id}")
+        print(f"🔥 Vendor: {order.vendor.business_name}")
+        print(f"🔥 Has FCM token: {hasattr(order.vendor, 'fcm_token')}")
+        if hasattr(order.vendor, 'fcm_token'):
+            print(f"🔥 FCM token exists: {bool(order.vendor.fcm_token)}")
+            if order.vendor.fcm_token:
+                print(f"🔥 FCM token: {order.vendor.fcm_token[:30]}...")
+        
         try:
             if hasattr(order.vendor, 'fcm_token') and order.vendor.fcm_token:
+                print(f"🚀 SENDING AUTO-OPEN FCM for order {order.id}")
                 from .firebase_init import send_data_only_message
-                send_data_only_message(
+                
+                fcm_data = {
+                    "autoOpen": "true",
+                    "orderId": str(order.id),
+                    "orderNumber": order.order_number,
+                    "amount": str(order.total_amount),
+                    "action": "autoOpenOrder",
+                    "forceOpen": "true"
+                }
+                print(f"🔥 FCM Data: {fcm_data}")
+                
+                success = send_data_only_message(
                     token=order.vendor.fcm_token,
-                    data={
-                        "autoOpen": "true",
-                        "orderId": str(order.id),
-                        "orderNumber": order.order_number,
-                        "amount": str(order.total_amount),
-                        "action": "autoOpenOrder",
-                        "forceOpen": "true"
-                    }
+                    data=fcm_data
                 )
-                print(f"Auto-open FCM sent via notification_utils for order {order.id}")
+                
+                if success:
+                    print(f"✅ Auto-open FCM sent successfully for order {order.id}")
+                else:
+                    print(f"❌ Auto-open FCM failed for order {order.id}")
+            else:
+                print(f"❌ No FCM token for vendor {order.vendor.business_name}")
         except Exception as e:
-            print(f"Failed to send auto-open FCM: {e}")
+            print(f"💥 Exception sending auto-open FCM: {e}")
+            import traceback
+            traceback.print_exc()
 
 def send_payment_notification(order, payment_status):
     """
