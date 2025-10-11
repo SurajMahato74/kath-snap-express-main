@@ -16,9 +16,10 @@ def send_auto_open_fcm_message(user, order_id, order_number, amount):
             print(f"No FCM tokens found for user {user.id}")
             return False
         
-        # Prepare the data-only message (no notification payload)
+        # Send multiple messages for reliability
         for fcm_token in fcm_tokens:
-            message = {
+            # Message 1: Pure data message
+            data_message = {
                 "to": fcm_token.token,
                 "priority": "high",
                 "data": {
@@ -28,38 +29,68 @@ def send_auto_open_fcm_message(user, order_id, order_number, amount):
                     "amount": amount,
                     "action": "autoOpenOrder",
                     "forceOpen": "true",
-                    "timestamp": str(int(time.time()))
+                    "timestamp": str(int(time.time())),
+                    "type": "data_only"
+                }
+            }
+            
+            # Message 2: High priority with notification (for fallback)
+            notification_message = {
+                "to": fcm_token.token,
+                "priority": "high",
+                "notification": {
+                    "title": "🔔 New Order!",
+                    "body": f"Order #{order_number} - ₹{amount}",
+                    "click_action": "FLUTTER_NOTIFICATION_CLICK",
+                    "sound": "default"
+                },
+                "data": {
+                    "autoOpen": "true",
+                    "orderId": str(order_id),
+                    "orderNumber": order_number,
+                    "amount": amount,
+                    "action": "autoOpenOrder",
+                    "forceOpen": "true",
+                    "type": "notification_with_data"
                 },
                 "android": {
                     "priority": "high",
-                    "data": {
-                        "autoOpen": "true",
-                        "orderId": str(order_id),
-                        "orderNumber": order_number,
-                        "amount": amount,
-                        "action": "autoOpenOrder",
-                        "forceOpen": "true"
+                    "notification": {
+                        "click_action": "FLUTTER_NOTIFICATION_CLICK",
+                        "sound": "default"
                     }
                 }
             }
             
-            # Send the message
+            messages = [data_message, notification_message]
+            
+            # Send all messages
             headers = {
                 'Authorization': f'key={settings.FCM_SERVER_KEY}',
                 'Content-Type': 'application/json',
             }
             
-            response = requests.post(
-                'https://fcm.googleapis.com/fcm/send',
-                headers=headers,
-                data=json.dumps(message)
-            )
+            success_count = 0
+            for i, message in enumerate(messages):
+                try:
+                    response = requests.post(
+                        'https://fcm.googleapis.com/fcm/send',
+                        headers=headers,
+                        data=json.dumps(message)
+                    )
+                    
+                    if response.status_code == 200:
+                        print(f"✅ Auto-open FCM {i+1} sent successfully to {user.username}")
+                        success_count += 1
+                    else:
+                        print(f"❌ Failed to send auto-open FCM {i+1}: {response.text}")
+                        
+                    # Small delay between messages
+                    time.sleep(0.2)
+                except Exception as e:
+                    print(f"❌ Error sending message {i+1}: {e}")
             
-            if response.status_code == 200:
-                print(f"✅ Auto-open FCM sent successfully to {user.username}")
-                return True
-            else:
-                print(f"❌ Failed to send auto-open FCM: {response.text}")
+            return success_count > 0
                 
     except Exception as e:
         print(f"❌ Error sending auto-open FCM: {e}")
