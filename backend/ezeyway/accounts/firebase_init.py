@@ -96,10 +96,7 @@ def send_data_only_message(token, data):
                 notification=messaging.AndroidNotification(
                     sound='default',
                     channel_id='order_notifications',
-                    click_action='FLUTTER_NOTIFICATION_CLICK',
-                    priority=messaging.Priority.HIGH,
-                    default_sound=True,
-                    default_vibrate_timings=True
+                    click_action='FLUTTER_NOTIFICATION_CLICK'
                 )
             )
         )
