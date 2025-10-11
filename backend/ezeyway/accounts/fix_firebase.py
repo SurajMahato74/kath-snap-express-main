@@ -27,7 +27,7 @@ def fix_firebase():
                 firebase_admin.delete_app(app)
         
         # Initialize with correct path
-        service_account_path = '/home/ezeywayc/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638605a4.json'
+        service_account_path = '/home/ezeywayc/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'
         
         print(f"📁 Checking file: {service_account_path}")
         if not os.path.exists(service_account_path):
