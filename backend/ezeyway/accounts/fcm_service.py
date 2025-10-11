@@ -23,18 +23,45 @@ class FCMService:
     def initialize_firebase(self):
         """Initialize Firebase Admin SDK"""
         try:
+            # Check if Firebase is already initialized
+            if firebase_admin._apps:
+                logger.info("✅ Firebase Admin SDK already initialized")
+                return
+            
             # Path to service account key
             service_account_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH', 
-                'c:/Users/suraj/OneDrive/Desktop/BRANDWAVE/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json')
+                '/home/ezeywayc/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json')
             
+            # Alternative paths to try
+            alternative_paths = [
+                'c:/Users/suraj/OneDrive/Desktop/BRANDWAVE/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
+                '/home/ezeywayc/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
+                './ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
+                '../ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'
+            ]
+            
+            # Try to find the service account file
+            found_path = None
             if os.path.exists(service_account_path):
-                cred = credentials.Certificate(service_account_path)
+                found_path = service_account_path
+            else:
+                for path in alternative_paths:
+                    if os.path.exists(path):
+                        found_path = path
+                        break
+            
+            if found_path:
+                logger.info(f"📁 Using Firebase service account: {found_path}")
+                cred = credentials.Certificate(found_path)
                 firebase_admin.initialize_app(cred)
                 logger.info("✅ Firebase Admin SDK initialized successfully")
             else:
-                logger.warning("❌ Firebase service account file not found")
+                logger.error(f"❌ Firebase service account file not found. Tried paths: {[service_account_path] + alternative_paths}")
+                
         except Exception as e:
             logger.error(f"❌ Firebase initialization failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def send_order_notification(self, fcm_token, order_data):
         """Send FCM notification for new order"""
@@ -42,6 +69,14 @@ class FCMService:
             if not fcm_token:
                 logger.warning("No FCM token provided")
                 return False
+
+            # Check if Firebase is initialized
+            if not firebase_admin._apps:
+                logger.error("❌ Firebase not initialized")
+                return False
+
+            logger.info(f"📤 Sending FCM notification to token: {fcm_token[:20]}...")
+            logger.info(f"📊 Order data: {order_data}")
 
             # Create notification message
             message = messaging.Message(
@@ -76,6 +111,8 @@ class FCMService:
 
         except Exception as e:
             logger.error(f"❌ Failed to send FCM notification: {e}")
+            import traceback
+            logger.error(f"🔍 Full error traceback: {traceback.format_exc()}")
             return False
 
     def send_bulk_notification(self, fcm_tokens, title, body, data=None):
