@@ -1,0 +1,27 @@
+# Firebase service account (contains sensitive keys)
+ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json
+firebase-service-account.json
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Capacitor
+android/app/google-services.json
+ios/App/GoogleService-Info.plist
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
