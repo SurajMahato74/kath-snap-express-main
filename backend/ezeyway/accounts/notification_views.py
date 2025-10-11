@@ -63,3 +63,41 @@ def notification_count(request):
     ).count()
     
     return Response({'unread_count': unread_count})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def test_auto_open_notification(request):
+    """Test auto-open FCM notification"""
+    try:
+        from .fcm_utils import send_auto_open_fcm_message, send_background_trigger
+        
+        # Send auto-open FCM message
+        success = send_auto_open_fcm_message(
+            user=request.user,
+            order_id=999,
+            order_number='TEST-AUTO-OPEN',
+            amount='500'
+        )
+        
+        # Also send background trigger
+        send_background_trigger(
+            user=request.user,
+            order_data={
+                'order_id': 999,
+                'order_number': 'TEST-AUTO-OPEN',
+                'amount': '500'
+            }
+        )
+        
+        return Response({
+            'message': 'Auto-open test notification sent',
+            'success': success,
+            'user_id': request.user.id,
+            'username': request.user.username
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to send test notification: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

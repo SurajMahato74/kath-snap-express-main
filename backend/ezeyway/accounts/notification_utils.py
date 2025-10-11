@@ -116,7 +116,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
             send_realtime=True
         )
     
-    # Special case: Send vendor notification for new orders (pending status)
+    # Special case: Send vendor notification for new orders (pending status) with AUTO-OPEN
     elif new_status == 'pending' and old_status is None:
         create_order_notification(
             order=order,
@@ -126,6 +126,18 @@ def send_order_status_notifications(order, new_status, old_status=None):
             message=vendor_messages['pending'],
             send_realtime=True
         )
+        
+        # Send FCM auto-open message
+        try:
+            from .fcm_utils import send_auto_open_fcm_message
+            send_auto_open_fcm_message(
+                user=order.vendor.user,
+                order_id=order.id,
+                order_number=order.order_number,
+                amount=str(order.total_amount)
+            )
+        except Exception as e:
+            print(f"Failed to send auto-open FCM: {e}")
 
 def send_payment_notification(order, payment_status):
     """

@@ -75,16 +75,17 @@ class FCMService:
                 logger.error("❌ Firebase not initialized")
                 return False
 
-            logger.info(f"📤 Sending AUTO-OPEN FCM message to token: {fcm_token[:20]}...")
+            logger.info(f"📤 Sending HIGH PRIORITY FCM notification to token: {fcm_token[:20]}...")
             logger.info(f"📊 Order data: {order_data}")
-            logger.info("🚀 This will AUTO-OPEN the app without user interaction!")
+            logger.info("🚀 This will show notification that opens app when tapped!")
 
-            # Send DATA-ONLY message to auto-open app without user interaction
+            # Send HIGH PRIORITY notification that FORCES app to open when tapped
             message = messaging.Message(
-                # NO notification field - this makes it a data-only message
+                notification=messaging.Notification(
+                    title='🔔 NEW ORDER RECEIVED!',
+                    body=f"Order #{order_data['orderNumber']} - ₹{order_data['amount']}\n🚀 TAP TO OPEN APP AUTOMATICALLY"
+                ),
                 data={
-                    'title': '🔔 NEW ORDER RECEIVED',
-                    'body': f"Order #{order_data['orderNumber']} - ₹{order_data['amount']}",
                     'orderId': str(order_data['orderId']),
                     'orderNumber': order_data['orderNumber'],
                     'amount': str(order_data['amount']),
@@ -95,10 +96,18 @@ class FCMService:
                 },
                 android=messaging.AndroidConfig(
                     priority='high',
-                    # No notification config - data-only message
+                    notification=messaging.AndroidNotification(
+                        channel_id='order_alerts',
+                        priority='max',
+                        default_sound=True,
+                        default_vibrate_timings=True,
+                        default_light_settings=True,
+                        sticky=True,
+                        local_only=False,
+                        notification_priority='PRIORITY_MAX',
+                        visibility='public'
+                    ),
                     data={
-                        'title': '🔔 NEW ORDER RECEIVED',
-                        'body': f"Order #{order_data['orderNumber']} - ₹{order_data['amount']}",
                         'orderId': str(order_data['orderId']),
                         'orderNumber': order_data['orderNumber'],
                         'amount': str(order_data['amount']),
@@ -113,8 +122,8 @@ class FCMService:
 
             # Send the data-only message
             response = messaging.send(message)
-            logger.info(f"✅ AUTO-OPEN FCM message sent successfully: {response}")
-            logger.info("🚀 App should auto-open now without user interaction!")
+            logger.info(f"✅ HIGH PRIORITY FCM notification sent successfully: {response}")
+            logger.info("🚀 User will see notification and app will open when tapped!")
             return True
 
         except Exception as e:
