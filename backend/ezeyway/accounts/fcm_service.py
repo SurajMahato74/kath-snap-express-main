@@ -25,7 +25,7 @@ class FCMService:
         try:
             # Path to service account key
             service_account_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH', 
-                'c:/Users/suraj/OneDrive/Desktop/BRANDWAVE/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json')
+                'c:/Users/suraj/OneDrive/Desktop/BRANDWAVE/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json')
             
             if os.path.exists(service_account_path):
                 cred = credentials.Certificate(service_account_path)
