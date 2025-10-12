@@ -10,6 +10,9 @@ firebase-service-account.json
 # Node modules
 node_modules/
 
+# Build outputs
+dist/
+build/
 
 # Capacitor
 android/app/google-services.json
