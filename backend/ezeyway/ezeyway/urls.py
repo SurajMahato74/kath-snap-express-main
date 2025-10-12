@@ -4,9 +4,14 @@ from django.shortcuts import render
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
+import os
 
 def react_app_view(request, path=''):
-    return render(request, "index.html")
+    try:
+        with open(os.path.join(settings.BASE_DIR, 'dist', 'index.html'), 'r') as f:
+            return HttpResponse(f.read(), content_type='text/html')
+    except FileNotFoundError:
+        return HttpResponse("index.html not found", status=404)
 
 def ngrok_bypass_view(request):
     # Simple bypass for ngrok warning
