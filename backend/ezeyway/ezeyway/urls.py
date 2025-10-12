@@ -22,7 +22,7 @@ urlpatterns = [
     path("", include("accounts.api_urls")),  # Include API URLs at root level for backward compatibility
 ]
 
-# Static files
+# Static files (MUST come before catch-all)
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
@@ -30,5 +30,5 @@ else:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-# Catch-all for React routes (must be last)
+# Catch-all for React routes (MUST be last)
 urlpatterns += [re_path(r'^.*$', react_app_view, name='react_app')]
