@@ -43,6 +43,15 @@ class ConversationSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             other_participants = obj.participants.exclude(id=request.user.id)
             if other_participants.exists():
+                # For vendor (user_type='vendor'), prioritize customers
+                if request.user.user_type == 'vendor':
+                    customer_participants = other_participants.filter(user_type='customer')
+                    if customer_participants.exists():
+                        # Exclude admin/ezeyway user (id=1) if there are other customers
+                        non_admin_customers = customer_participants.exclude(id=1)
+                        if non_admin_customers.exists():
+                            return UserSerializer(non_admin_customers.first()).data
+                        return UserSerializer(customer_participants.first()).data
                 return UserSerializer(other_participants.first()).data
         return None
 

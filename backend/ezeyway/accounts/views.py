@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
-from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification
+from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification
 from .message_models import Conversation, Message, MessageRead
 from .order_models import Order, OrderItem, PaymentTransaction
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
@@ -339,28 +339,150 @@ def manage_categories(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         
-        if action == 'add':
+        if action == 'add_category':
             name = request.POST.get('name')
+            description = request.POST.get('description')
+            display_order = request.POST.get('display_order')
+            icon = request.FILES.get('icon')
+            
             if name:
                 try:
-                    Category.objects.create(name=name)
+                    Category.objects.create(
+                        name=name,
+                        description=description,
+                        display_order=int(display_order) if display_order else 0,
+                        icon=icon
+                    )
                     messages.success(request, 'Category added successfully!')
                 except Exception as e:
                     messages.error(request, f'Error adding category: {str(e)}')
             else:
                 messages.error(request, 'Category name is required.')
         
-        elif action == 'delete':
+        elif action == 'add_subcategory':
+            category_id = request.POST.get('category_id')
+            name = request.POST.get('subcategory_name')
+            description = request.POST.get('subcategory_description')
+            display_order = request.POST.get('subcategory_display_order')
+            icon = request.FILES.get('subcategory_icon')
+            
+            if category_id and name:
+                try:
+                    category = Category.objects.get(id=category_id)
+                    SubCategory.objects.create(
+                        category=category,
+                        name=name,
+                        description=description,
+                        display_order=int(display_order) if display_order else 0,
+                        icon=icon
+                    )
+                    messages.success(request, 'Subcategory added successfully!')
+                except Category.DoesNotExist:
+                    messages.error(request, 'Category not found.')
+                except Exception as e:
+                    messages.error(request, f'Error adding subcategory: {str(e)}')
+            else:
+                messages.error(request, 'Category and subcategory name are required.')
+        
+        elif action == 'delete_category':
             category_id = request.POST.get('category_id')
             try:
-                Category.objects.get(id=category_id).delete()
+                category = Category.objects.get(id=category_id)
+                if category.icon:
+                    category.icon.delete()
+                category.delete()
                 messages.success(request, 'Category deleted successfully!')
             except Category.DoesNotExist:
                 messages.error(request, 'Category not found.')
         
+        elif action == 'delete_subcategory':
+            subcategory_id = request.POST.get('subcategory_id')
+            try:
+                subcategory = SubCategory.objects.get(id=subcategory_id)
+                if subcategory.icon:
+                    subcategory.icon.delete()
+                subcategory.delete()
+                messages.success(request, 'Subcategory deleted successfully!')
+            except SubCategory.DoesNotExist:
+                messages.error(request, 'Subcategory not found.')
+        
+        elif action == 'toggle_category':
+            category_id = request.POST.get('category_id')
+            try:
+                category = Category.objects.get(id=category_id)
+                category.is_active = not category.is_active
+                category.save()
+                status = 'activated' if category.is_active else 'deactivated'
+                messages.success(request, f'Category {status} successfully!')
+            except Category.DoesNotExist:
+                messages.error(request, 'Category not found.')
+        
+        elif action == 'toggle_subcategory':
+            subcategory_id = request.POST.get('subcategory_id')
+            try:
+                subcategory = SubCategory.objects.get(id=subcategory_id)
+                subcategory.is_active = not subcategory.is_active
+                subcategory.save()
+                status = 'activated' if subcategory.is_active else 'deactivated'
+                messages.success(request, f'Subcategory {status} successfully!')
+            except SubCategory.DoesNotExist:
+                messages.error(request, 'Subcategory not found.')
+        
+        elif action == 'edit_category':
+            category_id = request.POST.get('category_id')
+            name = request.POST.get('name')
+            description = request.POST.get('description')
+            display_order = request.POST.get('display_order')
+            icon = request.FILES.get('icon')
+            
+            if category_id and name:
+                try:
+                    category = Category.objects.get(id=category_id)
+                    category.name = name
+                    category.description = description
+                    category.display_order = int(display_order) if display_order else 0
+                    if icon:
+                        if category.icon:
+                            category.icon.delete()
+                        category.icon = icon
+                    category.save()
+                    messages.success(request, 'Category updated successfully!')
+                except Category.DoesNotExist:
+                    messages.error(request, 'Category not found.')
+                except Exception as e:
+                    messages.error(request, f'Error updating category: {str(e)}')
+            else:
+                messages.error(request, 'Category name is required.')
+        
+        elif action == 'edit_subcategory':
+            subcategory_id = request.POST.get('subcategory_id')
+            name = request.POST.get('subcategory_name')
+            description = request.POST.get('subcategory_description')
+            display_order = request.POST.get('subcategory_display_order')
+            icon = request.FILES.get('subcategory_icon')
+            
+            if subcategory_id and name:
+                try:
+                    subcategory = SubCategory.objects.get(id=subcategory_id)
+                    subcategory.name = name
+                    subcategory.description = description
+                    subcategory.display_order = int(display_order) if display_order else 0
+                    if icon:
+                        if subcategory.icon:
+                            subcategory.icon.delete()
+                        subcategory.icon = icon
+                    subcategory.save()
+                    messages.success(request, 'Subcategory updated successfully!')
+                except SubCategory.DoesNotExist:
+                    messages.error(request, 'Subcategory not found.')
+                except Exception as e:
+                    messages.error(request, f'Error updating subcategory: {str(e)}')
+            else:
+                messages.error(request, 'Subcategory name is required.')
+        
         return redirect('manage_categories')
     
-    categories = Category.objects.all().order_by('name')
+    categories = Category.objects.prefetch_related('subcategories').all().order_by('display_order', 'name')
     context = {
         'categories': categories,
     }

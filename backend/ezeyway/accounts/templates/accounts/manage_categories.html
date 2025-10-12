@@ -4,13 +4,50 @@
 
 {% block extra_css %}
 <style>
+    .category-icon {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+    
+    .subcategory-icon {
+        width: 30px;
+        height: 30px;
+        object-fit: cover;
+        border-radius: 6px;
+    }
+    
+    .subcategory-item {
+        background-color: #f8f9fa;
+        border-left: 3px solid #007bff;
+        margin-left: 20px;
+        padding: 10px 15px;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .category-card {
+        border: 1px solid #e3e6f0;
+        border-radius: 10px;
+        transition: all 0.3s ease;
+    }
+    
+    .category-card:hover {
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    }
+    
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
     @media (max-width: 575.98px) {
         .card-body {
             padding: 1rem 0.75rem;
         }
         
-        .border-bottom:last-child {
-            border-bottom: none !important;
+        .subcategory-item {
+            margin-left: 10px;
         }
     }
 </style>
@@ -18,109 +55,395 @@
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Manage Categories</h1>
+    <h1 class="h2"><i class="fas fa-tags me-2"></i>Manage Categories</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+        <i class="fas fa-plus me-1"></i>Add Category
+    </button>
 </div>
 
-<!-- Add Category Form -->
-<div class="row mb-4">
-    <div class="col-lg-6 col-md-8">
-        <div class="card shadow-sm">
-            <div class="card-header py-3">
-                <h6 class="m-0 fw-bold text-primary"><i class="fas fa-plus me-2"></i>Add New Category</h6>
+<!-- Categories List -->
+<div class="row">
+    {% if categories %}
+        {% for category in categories %}
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="category-card card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center py-3">
+                    <div class="d-flex align-items-center">
+                        {% if category.icon %}
+                            <img src="{{ category.icon.url }}" alt="{{ category.name }}" class="category-icon me-3">
+                        {% else %}
+                            <div class="category-icon me-3 bg-light d-flex align-items-center justify-content-center">
+                                <i class="fas fa-tag text-muted"></i>
+                            </div>
+                        {% endif %}
+                        <div>
+                            <h6 class="mb-0 fw-bold">{{ category.name }}</h6>
+                            <small class="text-muted">{{ category.subcategories.count }} subcategories</small>
+                        </div>
+                    </div>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editCategoryModal" 
+                                        onclick="editCategory({{ category.id }}, '{{ category.name }}', '{{ category.description|default:'' }}', {{ category.display_order }})">
+                                    <i class="fas fa-edit me-2"></i>Edit Category
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#addSubcategoryModal" 
+                                        onclick="setParentCategory({{ category.id }}, '{{ category.name }}')">
+                                    <i class="fas fa-plus me-2"></i>Add Subcategory
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="toggle_category">
+                                    <input type="hidden" name="category_id" value="{{ category.id }}">
+                                    <button type="submit" class="dropdown-item">
+                                        {% if category.is_active %}
+                                            <i class="fas fa-eye-slash me-2"></i>Deactivate
+                                        {% else %}
+                                            <i class="fas fa-eye me-2"></i>Activate
+                                        {% endif %}
+                                    </button>
+                                </form>
+                            </li>
+                            <li>
+                                <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure? This will delete all subcategories too.');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_category">
+                                    <input type="hidden" name="category_id" value="{{ category.id }}">
+                                    <button type="submit" class="dropdown-item text-danger">
+                                        <i class="fas fa-trash me-2"></i>Delete
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="badge status-badge {% if category.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if category.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                        <small class="text-muted">Order: {{ category.display_order }}</small>
+                    </div>
+                    
+                    {% if category.description %}
+                        <p class="text-muted small mb-3">{{ category.description|truncatechars:100 }}</p>
+                    {% endif %}
+                    
+                    <!-- Subcategories -->
+                    {% if category.subcategories.all %}
+                        <div class="subcategories">
+                            <h6 class="text-muted mb-2">Subcategories:</h6>
+                            {% for subcategory in category.subcategories.all %}
+                                <div class="subcategory-item mb-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center">
+                                            {% if subcategory.icon %}
+                                                <img src="{{ subcategory.icon.url }}" alt="{{ subcategory.name }}" class="subcategory-icon me-2">
+                                            {% else %}
+                                                <div class="subcategory-icon me-2 bg-white d-flex align-items-center justify-content-center">
+                                                    <i class="fas fa-tag text-muted" style="font-size: 12px;"></i>
+                                                </div>
+                                            {% endif %}
+                                            <div>
+                                                <span class="fw-medium">{{ subcategory.name }}</span>
+                                                <span class="badge ms-2 {% if subcategory.is_active %}bg-success{% else %}bg-secondary{% endif %}" style="font-size: 0.6rem;">
+                                                    {% if subcategory.is_active %}Active{% else %}Inactive{% endif %}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#editSubcategoryModal" 
+                                                            onclick="editSubcategory({{ subcategory.id }}, '{{ subcategory.name }}', '{{ subcategory.description|default:'' }}', {{ subcategory.display_order }})">
+                                                        <i class="fas fa-edit me-2"></i>Edit
+                                                    </button>
+                                                </li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li>
+                                                    <form method="post" style="display: inline;">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="toggle_subcategory">
+                                                        <input type="hidden" name="subcategory_id" value="{{ subcategory.id }}">
+                                                        <button type="submit" class="dropdown-item">
+                                                            {% if subcategory.is_active %}
+                                                                <i class="fas fa-eye-slash me-2"></i>Deactivate
+                                                            {% else %}
+                                                                <i class="fas fa-eye me-2"></i>Activate
+                                                            {% endif %}
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this subcategory?');">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="delete_subcategory">
+                                                        <input type="hidden" name="subcategory_id" value="{{ subcategory.id }}">
+                                                        <button type="submit" class="dropdown-item text-danger">
+                                                            <i class="fas fa-trash me-2"></i>Delete
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    {% if subcategory.description %}
+                                        <small class="text-muted d-block mt-1">{{ subcategory.description|truncatechars:80 }}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-3">
+                            <i class="fas fa-plus-circle text-muted mb-2"></i>
+                            <p class="text-muted small mb-0">No subcategories yet</p>
+                            <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#addSubcategoryModal" 
+                                    onclick="setParentCategory({{ category.id }}, '{{ category.name }}')">
+                                Add First Subcategory
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="card-footer text-muted">
+                    <small>Created: {{ category.created_at|date:"M d, Y" }}</small>
+                </div>
             </div>
-            <div class="card-body">
-                <form method="post">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="add">
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-tags fa-4x text-muted mb-4"></i>
+                <h4 class="text-muted">No categories found</h4>
+                <p class="text-muted">Create your first category to get started.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                    <i class="fas fa-plus me-1"></i>Add First Category
+                </button>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Add New Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_category">
+                <div class="modal-body">
                     <div class="mb-3">
-                        <label for="name" class="form-label">Category Name</label>
+                        <label for="name" class="form-label">Category Name *</label>
                         <input type="text" class="form-control" id="name" name="name" placeholder="Enter category name" required>
                     </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Optional category description"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="icon" class="form-label">Category Icon</label>
+                        <input type="file" class="form-control" id="icon" name="icon" accept="image/*">
+                        <div class="form-text">Upload an icon for this category (optional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="display_order" class="form-label">Display Order</label>
+                        <input type="number" class="form-control" id="display_order" name="display_order" value="0" min="0">
+                        <div class="form-text">Lower numbers appear first (0 = first position)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>Add Category
                     </button>
-                </form>
-            </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
-<!-- Categories List -->
-<div class="card shadow">
-    <div class="card-header py-3">
-        <h6 class="m-0 fw-bold text-primary">Categories ({{ categories.count }})</h6>
-    </div>
-    <div class="card-body p-0">
-        {% if categories %}
-            <!-- Desktop Table -->
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="border-0">ID</th>
-                            <th class="border-0">Name</th>
-                            <th class="border-0">Created At</th>
-                            <th class="border-0">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for category in categories %}
-                        <tr>
-                            <td class="align-middle">#{{ category.id }}</td>
-                            <td class="align-middle">
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-tag text-muted me-2"></i>
-                                    <span class="fw-bold">{{ category.name }}</span>
-                                </div>
-                            </td>
-                            <td class="align-middle text-muted">{{ category.created_at|date:"M d, Y H:i" }}</td>
-                            <td class="align-middle">
-                                <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this category?');">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="category_id" value="{{ category.id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Category">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+<!-- Add Subcategory Modal -->
+<div class="modal fade" id="addSubcategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Add Subcategory</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            
-            <!-- Mobile Cards -->
-            <div class="d-md-none">
-                {% for category in categories %}
-                <div class="border-bottom p-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center mb-2">
-                                <i class="fas fa-tag text-muted me-2"></i>
-                                <h6 class="mb-0">{{ category.name }}</h6>
-                            </div>
-                            <small class="text-muted">#{{ category.id }} • Created {{ category.created_at|date:"M d, Y" }}</small>
-                        </div>
-                        <form method="post" onsubmit="return confirm('Are you sure you want to delete this category?');">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="delete">
-                            <input type="hidden" name="category_id" value="{{ category.id }}">
-                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Category">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </form>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_subcategory">
+                <input type="hidden" name="category_id" id="parent_category_id">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Adding subcategory to: <strong id="parent_category_name"></strong>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="subcategory_name" class="form-label">Subcategory Name *</label>
+                        <input type="text" class="form-control" id="subcategory_name" name="subcategory_name" placeholder="Enter subcategory name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="subcategory_description" class="form-label">Description</label>
+                        <textarea class="form-control" id="subcategory_description" name="subcategory_description" rows="3" placeholder="Optional subcategory description"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="subcategory_icon" class="form-label">Subcategory Icon</label>
+                        <input type="file" class="form-control" id="subcategory_icon" name="subcategory_icon" accept="image/*">
+                        <div class="form-text">Upload an icon for this subcategory (optional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="subcategory_display_order" class="form-label">Display Order</label>
+                        <input type="number" class="form-control" id="subcategory_display_order" name="subcategory_display_order" value="0" min="0">
+                        <div class="form-text">Lower numbers appear first within the category</div>
                     </div>
                 </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="text-center py-5">
-                <i class="fas fa-tags fa-3x text-muted mb-3"></i>
-                <h5 class="text-muted">No categories found</h5>
-                <p class="text-muted">Add your first category using the form above.</p>
-            </div>
-        {% endif %}
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Add Subcategory
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
+
+<!-- Edit Category Modal -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="edit_category">
+                <input type="hidden" name="category_id" id="edit_category_id">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_name" class="form-label">Category Name *</label>
+                        <input type="text" class="form-control" id="edit_name" name="name" placeholder="Enter category name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_description" class="form-label">Description</label>
+                        <textarea class="form-control" id="edit_description" name="description" rows="3" placeholder="Optional category description"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_icon" class="form-label">Category Icon</label>
+                        <input type="file" class="form-control" id="edit_icon" name="icon" accept="image/*">
+                        <div class="form-text">Upload a new icon to replace the current one (optional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_display_order" class="form-label">Display Order</label>
+                        <input type="number" class="form-control" id="edit_display_order" name="display_order" value="0" min="0">
+                        <div class="form-text">Lower numbers appear first (0 = first position)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Update Category
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Subcategory Modal -->
+<div class="modal fade" id="editSubcategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Subcategory</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="edit_subcategory">
+                <input type="hidden" name="subcategory_id" id="edit_subcategory_id">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_subcategory_name" class="form-label">Subcategory Name *</label>
+                        <input type="text" class="form-control" id="edit_subcategory_name" name="subcategory_name" placeholder="Enter subcategory name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_subcategory_description" class="form-label">Description</label>
+                        <textarea class="form-control" id="edit_subcategory_description" name="subcategory_description" rows="3" placeholder="Optional subcategory description"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_subcategory_icon" class="form-label">Subcategory Icon</label>
+                        <input type="file" class="form-control" id="edit_subcategory_icon" name="subcategory_icon" accept="image/*">
+                        <div class="form-text">Upload a new icon to replace the current one (optional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_subcategory_display_order" class="form-label">Display Order</label>
+                        <input type="number" class="form-control" id="edit_subcategory_display_order" name="subcategory_display_order" value="0" min="0">
+                        <div class="form-text">Lower numbers appear first within the category</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Update Subcategory
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function setParentCategory(categoryId, categoryName) {
+    document.getElementById('parent_category_id').value = categoryId;
+    document.getElementById('parent_category_name').textContent = categoryName;
+}
+
+function editCategory(categoryId, name, description, displayOrder) {
+    document.getElementById('edit_category_id').value = categoryId;
+    document.getElementById('edit_name').value = name;
+    document.getElementById('edit_description').value = description;
+    document.getElementById('edit_display_order').value = displayOrder;
+}
+
+function editSubcategory(subcategoryId, name, description, displayOrder) {
+    document.getElementById('edit_subcategory_id').value = subcategoryId;
+    document.getElementById('edit_subcategory_name').value = name;
+    document.getElementById('edit_subcategory_description').value = description;
+    document.getElementById('edit_subcategory_display_order').value = displayOrder;
+}
+</script>
 {% endblock %}

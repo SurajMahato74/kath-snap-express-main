@@ -453,17 +453,46 @@ def create_vendor_wallet(sender, instance=None, created=False, **kwargs):
                 status='completed'
             )
 
+def category_icon_upload_path(instance, filename):
+    return f'categories/icons/{filename}'
+
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
+    icon = models.ImageField(upload_to=category_icon_upload_path, blank=True, null=True, help_text="Upload category icon")
+    description = models.TextField(blank=True, null=True, help_text="Optional category description")
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0, help_text="Display order (0 = first)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         verbose_name_plural = "Categories"
-        ordering = ['name']
+        ordering = ['display_order', 'name']
     
     def __str__(self):
         return self.name
+    
+    @property
+    def subcategories_count(self):
+        return self.subcategories.count()
+
+class SubCategory(models.Model):
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories')
+    name = models.CharField(max_length=100)
+    icon = models.ImageField(upload_to=category_icon_upload_path, blank=True, null=True, help_text="Upload subcategory icon")
+    description = models.TextField(blank=True, null=True, help_text="Optional subcategory description")
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0, help_text="Display order within category")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name_plural = "Sub Categories"
+        ordering = ['display_order', 'name']
+        unique_together = ('category', 'name')  # Unique subcategory name within each category
+    
+    def __str__(self):
+        return f"{self.category.name} > {self.name}"
 
 class DeliveryRadius(models.Model):
     radius = models.FloatField(help_text="Delivery radius in kilometers")
