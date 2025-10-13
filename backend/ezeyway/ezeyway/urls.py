@@ -45,10 +45,6 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("", include("accounts.api_urls")),  # API at root since Passenger uses /api base
     path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
-    # React frontend for root
-    re_path(r'^$', react_frontend_view, name='react_frontend'),
-    # Serve all other files as React static files
-    re_path(r'^.*$', serve_react_static, name='react_static'),
 ]
 
 # Static files
