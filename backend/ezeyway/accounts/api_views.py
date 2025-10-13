@@ -19,7 +19,7 @@ from .serializers import (
     AdminUserUpdateSerializer, UserStatsSerializer, SimpleChangePasswordSerializer,
     ProductSerializer, ProductImageSerializer, VendorWalletSerializer,
     WalletTransactionSerializer, AddMoneySerializer, CustomerProductSerializer,
-    UserFavoriteSerializer, CartSerializer, CartItemSerializer
+    UserFavoriteSerializer, CartSerializer, CartItemSerializer, CategorySerializer
 )
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
 from accounts import serializers
@@ -1491,9 +1491,10 @@ def clear_cart_api(request):
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def get_categories_api(request):
-    categories = Category.objects.all().order_by('name')
+    categories = Category.objects.filter(is_active=True).order_by('display_order', 'name')
+    serializer = CategorySerializer(categories, many=True, context={'request': request})
     return Response({
-        'categories': [{'id': cat.id, 'name': cat.name} for cat in categories]
+        'categories': serializer.data
     })
 
 @api_view(['GET'])

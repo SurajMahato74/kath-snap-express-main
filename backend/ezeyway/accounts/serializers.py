@@ -527,5 +527,21 @@ class CartSerializer(serializers.ModelSerializer):
 # Import order serializers
 from .order_serializers import *
 
+class CategorySerializer(serializers.ModelSerializer):
+    icon_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'icon', 'icon_url', 'description', 'is_active', 'display_order']
+        read_only_fields = ['id']
+    
+    def get_icon_url(self, obj):
+        request = self.context.get('request')
+        if obj.icon:
+            if request:
+                return request.build_absolute_uri(obj.icon.url)
+            return obj.icon.url
+        return None
+
 # Import message serializers
 from .message_serializers import *
