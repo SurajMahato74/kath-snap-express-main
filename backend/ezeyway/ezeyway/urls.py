@@ -13,9 +13,8 @@ def ngrok_bypass_view(request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
-    path("api/", include("accounts.api_urls")),  # Include API URLs with api/ prefix
+    path("api/", include("accounts.api_urls")),
     path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
-    path("", include("accounts.api_urls")),  # Include API URLs at root level for backward compatibility
 ]
 
 # Static files
