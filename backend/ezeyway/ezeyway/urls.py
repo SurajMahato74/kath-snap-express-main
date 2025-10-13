@@ -12,9 +12,9 @@ def ngrok_bypass_view(request):
     return response
 
 def react_frontend_view(request):
-    # Serve React index.html
+    # Serve React index.html from public_html root
     try:
-        with open('/home/ezeywayc/public_html/ezeyway/dist/index.html', 'r') as f:
+        with open('/home/ezeywayc/public_html/index.html', 'r') as f:
             return HttpResponse(f.read(), content_type='text/html')
     except FileNotFoundError:
         return HttpResponse("React app not found", status=404)
@@ -45,6 +45,8 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("", include("accounts.api_urls")),  # API at root since Passenger uses /api base
     path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
+    # Serve React frontend for root URL
+    re_path(r'^$', react_frontend_view, name='react_frontend'),
 ]
 
 # Static files
