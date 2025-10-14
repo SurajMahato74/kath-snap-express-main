@@ -3,7 +3,7 @@ from django.contrib.auth import authenticate
 from django.db.models import Q
 from django.utils import timezone
 from datetime import time
-from .models import CustomUser, VendorProfile, VendorDocument, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem
+from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -119,6 +119,8 @@ class VendorProfileSerializer(serializers.ModelSerializer):
     fssai_license_url = serializers.SerializerMethodField()
     bank_document_url = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
+    shop_images = serializers.SerializerMethodField()
 
     class Meta:
         model = VendorProfile
@@ -129,7 +131,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'business_license', 'business_license_file', 'business_license_file_url', 'gst_number', 'gst_certificate', 'gst_certificate_url',
             'pan_number', 'fssai_license', 'fssai_license_url', 'bank_name', 'account_holder_name',
             'account_number', 'ifsc_code', 'bank_document', 'bank_document_url', 'delivery_radius',
-            'min_order_amount', 'is_approved', 'approval_date', 'additional_docs',
+            'min_order_amount', 'is_approved', 'approval_date', 'is_rejected', 'rejection_reason', 'rejection_date', 'additional_docs',
             'established_year', 'employee_count', 'website', 'facebook', 'instagram', 'twitter',
             'delivery_fee', 'free_delivery_above', 'estimated_delivery_time', 'delivery_slots',
             'online_ordering', 'home_delivery', 'pickup_service', 'bulk_orders', 'subscription_service',
@@ -142,11 +144,18 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'friday_open', 'friday_close', 'friday_closed',
             'saturday_open', 'saturday_close', 'saturday_closed',
             'sunday_open', 'sunday_close', 'sunday_closed',
-            'is_active', 'status_override', 'status_override_date'
+            'is_active', 'status_override', 'status_override_date',
+            'documents', 'shop_images'
         ]
-        read_only_fields = ['id', 'user', 'is_approved', 'approval_date', 'is_active']
+        read_only_fields = ['id', 'user', 'is_approved', 'approval_date', 'is_rejected', 'rejection_reason', 'rejection_date', 'is_active']
     
     def update(self, instance, validated_data):
+        # Reset rejection status when vendor updates profile
+        if instance.is_rejected:
+            instance.is_rejected = False
+            instance.rejection_reason = None
+            instance.rejection_date = None
+        
         # Handle file uploads separately
         for field_name, field_value in validated_data.items():
             setattr(instance, field_name, field_value)
@@ -234,6 +243,26 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             return False
 
         return day_open <= current_time < day_close
+    
+    def get_documents(self, obj):
+        import logging
+        logger = logging.getLogger(__name__)
+        request = self.context.get('request')
+        documents = VendorDocument.objects.filter(vendor_profile=obj)
+        logger.debug(f"get_documents for profile {obj.id}: found {documents.count()} documents")
+        serialized_data = VendorDocumentSerializer(documents, many=True, context={'request': request}).data
+        logger.debug(f"Serialized documents data: {len(serialized_data)} items")
+        return serialized_data
+    
+    def get_shop_images(self, obj):
+        import logging
+        logger = logging.getLogger(__name__)
+        request = self.context.get('request')
+        images = VendorShopImage.objects.filter(vendor_profile=obj).order_by('-is_primary', 'uploaded_at')
+        logger.debug(f"get_shop_images for profile {obj.id}: found {images.count()} images")
+        serialized_data = VendorShopImageSerializer(images, many=True, context={'request': request}).data
+        logger.debug(f"Serialized shop images data: {len(serialized_data)} items")
+        return serialized_data
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -300,17 +329,53 @@ class VendorProfileSerializer(serializers.ModelSerializer):
         return attrs
 
 class VendorDocumentSerializer(serializers.ModelSerializer):
+    document = serializers.FileField(write_only=True)
+    document_url = serializers.SerializerMethodField(read_only=True)
+    
     class Meta:
         model = VendorDocument
-        fields = ['id', 'vendor_profile', 'document', 'uploaded_at']
-        read_only_fields = ['id', 'uploaded_at']
+        fields = ['id', 'vendor_profile', 'document', 'document_url', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at', 'document_url']
+    
+    def get_document_url(self, obj):
+        import logging
+        logger = logging.getLogger(__name__)
+        request = self.context.get('request')
+        logger.debug(f"get_document_url for document {obj.id}: document={obj.document}")
+        if obj.document:
+            if request:
+                url = request.build_absolute_uri(f'/media/{obj.document}')
+                logger.debug(f"Generated document URL: {url}")
+                return url
+            url = f'/media/{obj.document}'
+            logger.debug(f"Generated document URL (no request): {url}")
+            return url
+        logger.debug("No document file found")
+        return None
 
-    def validate(self, attrs):
-        if 'vendor_profile' not in attrs:
-            raise serializers.ValidationError({'vendor_profile': 'Vendor profile is required.'})
-        if 'document' not in attrs:
-            raise serializers.ValidationError({'document': 'Document is required.'})
-        return attrs
+class VendorShopImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VendorShopImage
+        fields = ['id', 'vendor_profile', 'image', 'image_url', 'is_primary', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at']
+    
+    def get_image_url(self, obj):
+        import logging
+        logger = logging.getLogger(__name__)
+        request = self.context.get('request')
+        logger.debug(f"get_image_url for image {obj.id}: image={obj.image}")
+        if obj.image:
+            if request:
+                url = request.build_absolute_uri(f'/media/{obj.image}')
+                logger.debug(f"Generated image URL: {url}")
+                return url
+            url = f'/media/{obj.image}'
+            logger.debug(f"Generated image URL (no request): {url}")
+            return url
+        logger.debug("No image file found")
+        return None
 
 class AdminUserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
@@ -386,11 +451,11 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'category', 'subcategory', 'price', 'cost_price',
             'sku', 'barcode', 'quantity', 'low_stock_threshold',
-            'description', 'short_description', 'tags', 'status', 'featured',
+            'description', 'short_description', 'tags', 'status', 'featured', 'free_delivery',
             'seo_title', 'seo_description', 'dynamic_fields', 'images', 'image_files',
-            'created_at', 'updated_at'
+            'total_sold', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'total_sold', 'created_at', 'updated_at']
     
     def create(self, validated_data):
         image_files = validated_data.pop('image_files', [])

@@ -9,13 +9,19 @@ from django.views.decorators.csrf import csrf_exempt
 from decimal import Decimal
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
+from django.db import transaction
 import math
-from .models import CustomUser, VendorProfile, VendorDocument, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, DeliveryRadius, Slider
+import logging
+
+logger = logging.getLogger(__name__)
+from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider
+from datetime import timedelta
+from .complete_onboarding_view import complete_vendor_onboarding
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     ChangePasswordSerializer, ForgotPasswordSerializer,
     ResetPasswordSerializer, OTPSerializer, VendorProfileSerializer,
-    VendorDocumentSerializer, AdminUserCreateSerializer,
+    VendorDocumentSerializer, VendorShopImageSerializer, AdminUserCreateSerializer,
     AdminUserUpdateSerializer, UserStatsSerializer, SimpleChangePasswordSerializer,
     ProductSerializer, ProductImageSerializer, VendorWalletSerializer,
     WalletTransactionSerializer, AddMoneySerializer, CustomerProductSerializer,
@@ -66,9 +72,15 @@ def login_api(request):
             vendor_profile = VendorProfile.objects.get(user=user)
             profile_exists = True
             is_approved = vendor_profile.is_approved
+            is_rejected = vendor_profile.is_rejected
+            rejection_reason = vendor_profile.rejection_reason
+            rejection_date = vendor_profile.rejection_date
         except VendorProfile.DoesNotExist:
             profile_exists = False
             is_approved = False
+            is_rejected = False
+            rejection_reason = None
+            rejection_date = None
 
         # Determine available roles - users can be both customer and vendor
         available_roles = ['customer']  # All users can be customers
@@ -84,6 +96,9 @@ def login_api(request):
             'current_role': user.user_type,
             'profile_exists': profile_exists,
             'is_approved': is_approved,
+            'is_rejected': is_rejected if is_rejected is not None else False,
+            'rejection_reason': rejection_reason,
+            'rejection_date': rejection_date.isoformat() if rejection_date else None,
             'message': 'Login successful'
         }, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -438,16 +453,25 @@ def verify_otp_api(request):
                     vendor_profile = VendorProfile.objects.get(user=user)
                     profile_exists = True
                     is_approved = vendor_profile.is_approved
+                    is_rejected = vendor_profile.is_rejected
+                    rejection_reason = vendor_profile.rejection_reason
+                    rejection_date = vendor_profile.rejection_date
                 except VendorProfile.DoesNotExist:
                     profile_exists = False
                     is_approved = False
+                    is_rejected = False
+                    rejection_reason = None
+                    rejection_date = None
 
                 return Response({
                     'message': 'OTP verified successfully',
                     'token': token.key,
                     'user': UserSerializer(user).data,
                     'profile_exists': profile_exists,
-                    'is_approved': is_approved
+                    'is_approved': is_approved,
+                    'is_rejected': is_rejected,
+                    'rejection_reason': rejection_reason,
+                    'rejection_date': rejection_date
                 })
             else:
                 return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
@@ -531,11 +555,9 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
             return VendorProfile.objects.all()
         return VendorProfile.objects.filter(user=self.request.user)
 
+    @transaction.atomic
     def perform_create(self, serializer):
         from rest_framework import serializers as drf_serializers
-        # Ensure user is a vendor
-        if not self.request.user.is_vendor:
-            raise drf_serializers.ValidationError({'user': 'Only vendors can create a vendor profile.'})
         # Prevent duplicate profiles
         if VendorProfile.objects.filter(user=self.request.user).exists():
             raise drf_serializers.ValidationError({'user': 'Vendor profile already exists.'})
@@ -545,29 +567,80 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
         if default_radius:
             serializer.validated_data['delivery_radius'] = default_radius.radius
         
+        # Allow any user to create vendor profile
         serializer.save(user=self.request.user)
 
 class VendorProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = VendorProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    def get_queryset(self):
-        if self.request.user.is_superuser:
-            return VendorProfile.objects.all()
-        return VendorProfile.objects.filter(user=self.request.user)
+    
+    def dispatch(self, request, *args, **kwargs):
+        logger.debug(f"VendorProfileDetailView dispatch called with method: {request.method}, path: {request.path}")
+        logger.debug(f"URL kwargs: {kwargs}")
+        return super().dispatch(request, *args, **kwargs)
+    
+    def get_object(self):
+        pk = self.kwargs.get('pk')
+        user = self.request.user
+        logger.debug(f"VendorProfileDetailView get_object called by user: {user.username}, is_superuser: {user.is_superuser}, pk: {pk}")
+        
+        # Check if profile exists at all
+        all_profiles = VendorProfile.objects.all().values_list('id', flat=True)
+        logger.debug(f"All existing profile IDs: {list(all_profiles)}")
+        
+        if user.is_superuser:
+            try:
+                profile = VendorProfile.objects.get(pk=pk)
+                logger.debug(f"Superuser found profile: {profile.id} for business: {profile.business_name}")
+                return profile
+            except VendorProfile.DoesNotExist:
+                logger.error(f"Superuser: Profile with pk={pk} not found. Available IDs: {list(all_profiles)}")
+                from rest_framework.exceptions import NotFound
+                raise NotFound('Vendor profile not found')
+        else:
+            try:
+                profile = VendorProfile.objects.get(pk=pk, user=user)
+                logger.debug(f"Regular user found their profile: {profile.id}")
+                return profile
+            except VendorProfile.DoesNotExist:
+                logger.error(f"Regular user: Profile with pk={pk} not found or access denied. Available IDs: {list(all_profiles)}")
+                from rest_framework.exceptions import NotFound
+                raise NotFound('Vendor profile not found')
+    
+    def retrieve(self, request, *args, **kwargs):
+        logger.debug(f"VendorProfileDetailView retrieve called with args: {args}, kwargs: {kwargs}")
+        logger.debug(f"Request path: {request.path}")
+        logger.debug(f"Request method: {request.method}")
+        logger.debug(f"Request user: {request.user.username} (authenticated: {request.user.is_authenticated})")
+        try:
+            instance = self.get_object()
+            logger.debug(f"Retrieved profile: {instance.id}, serializing...")
+            serializer = self.get_serializer(instance)
+            data = serializer.data
+            logger.debug(f"Serialized data keys: {list(data.keys())}")
+            logger.debug(f"Documents count: {len(data.get('documents', []))}")
+            logger.debug(f"Shop images count: {len(data.get('shop_images', []))}")
+            return Response(data)
+        except Exception as e:
+            logger.error(f"Error in VendorProfileDetailView retrieve: {str(e)}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
 
 class VendorDocumentListCreateView(generics.ListCreateAPIView):
     serializer_class = VendorDocumentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         if self.request.user.is_superuser:
             return VendorDocument.objects.all()
         return VendorDocument.objects.filter(vendor_profile__user=self.request.user)
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # Ensure vendor profile exists and belongs to the user
         vendor_profile_id = self.request.data.get('vendor_profile')
@@ -576,7 +649,63 @@ class VendorDocumentListCreateView(generics.ListCreateAPIView):
         except VendorProfile.DoesNotExist:
             from rest_framework import serializers as drf_serializers
             raise drf_serializers.ValidationError({'vendor_profile': 'Invalid vendor profile or access denied.'})
-        serializer.save(vendor_profile=vendor_profile)
+        
+        # Handle file upload
+        uploaded_file = serializer.validated_data.get('document')
+        if uploaded_file:
+            import os
+            from django.conf import settings
+            from django.core.files.storage import default_storage
+            
+            # Create filename
+            file_extension = os.path.splitext(uploaded_file.name)[1]
+            filename = f"documents/{vendor_profile.id}_{timezone.now().timestamp()}{file_extension}"
+            
+            # Save file
+            file_path = default_storage.save(filename, uploaded_file)
+            # Remove the file from validated_data and add the path
+            serializer.validated_data.pop('document')
+            serializer.save(vendor_profile=vendor_profile, document=file_path)
+        else:
+            from rest_framework import serializers as drf_serializers
+            raise drf_serializers.ValidationError({'document': 'Document file is required.'})
+
+class VendorShopImageListCreateView(generics.ListCreateAPIView):
+    serializer_class = VendorShopImageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return VendorShopImage.objects.all()
+        return VendorShopImage.objects.filter(vendor_profile__user=self.request.user)
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        vendor_profile_id = self.request.data.get('vendor_profile')
+        try:
+            vendor_profile = VendorProfile.objects.get(id=vendor_profile_id, user=self.request.user)
+        except VendorProfile.DoesNotExist:
+            from rest_framework import serializers as drf_serializers
+            raise drf_serializers.ValidationError({'vendor_profile': 'Invalid vendor profile or access denied.'})
+        
+        # Handle file upload
+        uploaded_file = self.request.FILES.get('image')
+        if uploaded_file:
+            import os
+            from django.conf import settings
+            from django.core.files.storage import default_storage
+            
+            # Create filename
+            file_extension = os.path.splitext(uploaded_file.name)[1]
+            filename = f"shop_images/{vendor_profile.id}_{timezone.now().timestamp()}{file_extension}"
+            
+            # Save file
+            file_path = default_storage.save(filename, uploaded_file)
+            serializer.save(vendor_profile=vendor_profile, image=file_path)
+        else:
+            from rest_framework import serializers as drf_serializers
+            raise drf_serializers.ValidationError({'image': 'Image file is required.'})
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -751,7 +880,14 @@ def admin_approve_vendor_api(request, vendor_id):
         vendor_profile = VendorProfile.objects.get(id=vendor_id)
         vendor_profile.is_approved = True
         vendor_profile.approval_date = timezone.now()
+        vendor_profile.is_rejected = False
+        vendor_profile.rejection_reason = None
+        vendor_profile.rejection_date = None
         vendor_profile.save()
+        
+        # Send approval email
+        from .email_notifications import send_vendor_approval_email
+        send_vendor_approval_email(vendor_profile)
         
         return Response({
             'message': f'Vendor {vendor_profile.business_name} approved successfully',
@@ -760,7 +896,7 @@ def admin_approve_vendor_api(request, vendor_id):
     except VendorProfile.DoesNotExist:
         return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
-@api_view(['DELETE'])
+@api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_reject_vendor_api(request, vendor_id):
     if not request.user.is_superuser:
@@ -768,14 +904,20 @@ def admin_reject_vendor_api(request, vendor_id):
 
     try:
         vendor_profile = VendorProfile.objects.get(id=vendor_id)
-        vendor_name = vendor_profile.business_name
-        username = vendor_profile.user.username
-
-        # Delete the vendor profile (this will cascade delete related documents)
-        vendor_profile.delete()
+        rejection_reason = request.data.get('reason', '')
+        
+        vendor_profile.is_rejected = True
+        vendor_profile.is_approved = False
+        vendor_profile.rejection_reason = rejection_reason
+        vendor_profile.rejection_date = timezone.now()
+        vendor_profile.save()
+        
+        # Send rejection email
+        from .email_notifications import send_vendor_rejection_email
+        send_vendor_rejection_email(vendor_profile)
 
         return Response({
-            'message': f'Vendor "{vendor_name}" ({username}) has been rejected and deleted successfully'
+            'message': f'Vendor "{vendor_profile.business_name}" has been rejected successfully'
         })
     except VendorProfile.DoesNotExist:
         return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -785,13 +927,14 @@ class ProductListCreateView(generics.ListCreateAPIView):
     serializer_class = ProductSerializer
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    pagination_class = PageNumberPagination
 
     def get_queryset(self):
         if self.request.user.is_superuser:
-            return Product.objects.all()
+            return Product.objects.all().order_by('-created_at')
         try:
             vendor_profile = VendorProfile.objects.get(user=self.request.user)
-            return Product.objects.filter(vendor=vendor_profile)
+            return Product.objects.filter(vendor=vendor_profile).order_by('-created_at')
         except VendorProfile.DoesNotExist:
             return Product.objects.none()
 
@@ -1499,6 +1642,21 @@ def get_categories_api(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
+def get_subcategories_api(request, category_name):
+    try:
+        category = Category.objects.get(name=category_name, is_active=True)
+        subcategories = category.subcategories.filter(is_active=True).order_by('display_order', 'name')
+        subcategory_names = [sub.name for sub in subcategories]
+        return Response({
+            'subcategories': subcategory_names
+        })
+    except Category.DoesNotExist:
+        return Response({
+            'subcategories': []
+        })
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
 def get_delivery_radius_api(request):
     # Get the first (smallest) delivery radius as default
     radius = DeliveryRadius.objects.first()
@@ -1717,6 +1875,207 @@ def test_fcm_notification_api(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
+def get_featured_packages_api(request):
+    """Get all active featured product packages"""
+    from .models import FeaturedProductPackage
+    
+    packages = FeaturedProductPackage.objects.filter(is_active=True).order_by('duration_days', 'amount')
+    
+    packages_data = []
+    for package in packages:
+        package_data = {
+            'id': package.id,
+            'name': package.name,
+            'duration_days': package.duration_days,
+            'amount': float(package.amount),
+            'package_type': package.package_type,
+            'description': package.description,
+        }
+        packages_data.append(package_data)
+    
+    return Response({
+        'success': True,
+        'packages': packages_data
+    })
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_product_featured_info_api(request, product_id):
+    """Get featured package info for a product"""
+    from .models import Product, ProductFeaturedPurchase, VendorProfile
+    from datetime import date
+    
+    try:
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        product = Product.objects.get(id=product_id, vendor=vendor_profile)
+        
+        # Get active featured purchase
+        featured_purchase = ProductFeaturedPurchase.objects.filter(
+            product=product,
+            is_active=True
+        ).first()
+        
+        if not featured_purchase:
+            return Response({
+                'has_featured': False,
+                'can_modify': True
+            })
+        
+        today = date.today()
+        can_modify = featured_purchase.start_date > today  # Can modify if not started yet
+        
+        return Response({
+            'has_featured': True,
+            'can_modify': can_modify,
+            'start_date': featured_purchase.start_date.isoformat(),
+            'end_date': featured_purchase.end_date.isoformat(),
+            'package_name': featured_purchase.package.name,
+            'is_active': featured_purchase.start_date <= today <= featured_purchase.end_date
+        })
+        
+    except (VendorProfile.DoesNotExist, Product.DoesNotExist):
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def reschedule_featured_package_api(request, product_id):
+    """Reschedule featured package start date (no wallet charge)"""
+    from .models import Product, ProductFeaturedPurchase, VendorProfile
+    from datetime import datetime, timedelta
+    
+    try:
+        start_date_str = request.data.get('start_date')
+        
+        if not start_date_str:
+            return Response({'error': 'Start date is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get vendor profile and product
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        product = Product.objects.get(id=product_id, vendor=vendor_profile)
+        
+        # Get active featured purchase
+        featured_purchase = ProductFeaturedPurchase.objects.filter(
+            product=product,
+            is_active=True
+        ).first()
+        
+        if not featured_purchase:
+            return Response({'error': 'No active featured package found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Parse new start date
+        new_start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        
+        # Calculate new end date based on package duration
+        duration_days = (featured_purchase.end_date - featured_purchase.start_date).days
+        new_end_date = new_start_date + timedelta(days=duration_days)
+        
+        # Update dates
+        featured_purchase.start_date = new_start_date
+        featured_purchase.end_date = new_end_date
+        featured_purchase.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Featured package rescheduled successfully',
+            'start_date': new_start_date.isoformat(),
+            'end_date': new_end_date.isoformat()
+        })
+        
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError:
+        return Response({'error': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def purchase_featured_package_api(request):
+    """Purchase a featured package for a product"""
+    from .models import Product, FeaturedProductPackage, ProductFeaturedPurchase, VendorProfile, VendorWallet
+    from datetime import datetime, timedelta
+    
+    try:
+        product_id = request.data.get('product_id')
+        package_id = request.data.get('package_id')
+        start_date_str = request.data.get('start_date')
+        
+        if not all([product_id, package_id, start_date_str]):
+            return Response({'error': 'Missing required fields'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get vendor profile
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        
+        # Get product and package
+        product = Product.objects.get(id=product_id, vendor=vendor_profile)
+        package = FeaturedProductPackage.objects.get(id=package_id, is_active=True)
+        
+        # Parse start date
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = start_date + timedelta(days=package.duration_days)
+        
+        # Get vendor wallet
+        wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
+        
+        # Check wallet balance
+        if wallet.balance < package.amount:
+            return Response({
+                'error': 'Insufficient wallet balance',
+                'required': float(package.amount),
+                'available': float(wallet.balance)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Deduct amount from wallet
+        success = wallet.deduct_commission(
+            amount=package.amount,
+            order_amount=package.amount,
+            description=f"Featured Package: {package.name} for {product.name}"
+        )
+        
+        if not success:
+            return Response({'error': 'Failed to deduct amount from wallet'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create featured purchase record
+        featured_purchase = ProductFeaturedPurchase.objects.create(
+            product=product,
+            vendor=vendor_profile,
+            package=package,
+            amount_paid=package.amount,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Mark product as featured
+        product.featured = True
+        product.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Featured package purchased successfully',
+            'purchase_id': featured_purchase.id,
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'amount_paid': float(package.amount),
+            'new_wallet_balance': float(wallet.balance)
+        })
+        
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    except FeaturedProductPackage.DoesNotExist:
+        return Response({'error': 'Package not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ValueError:
+        return Response({'error': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
 def get_sliders_api(request):
     """Get sliders based on user type and current date/time"""
     from .models import Slider
@@ -1770,3 +2129,26 @@ def get_sliders_api(request):
         'user_type': user_type,
         'count': len(sliders_data)
     })
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def vendor_notifications_api(request):
+    """Get vendor notifications (orders, refunds, stock alerts, status changes)"""
+    if not request.user.is_vendor:
+        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        
+        # Return empty notifications - real notifications will be created by actual events
+        notifications = []
+        
+        return Response({
+            'success': True,
+            'results': notifications
+        })
+        
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

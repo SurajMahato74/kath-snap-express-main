@@ -164,6 +164,9 @@ class VendorProfile(models.Model):
     ], default='pending')
     is_approved = models.BooleanField(default=False)
     approval_date = models.DateTimeField(blank=True, null=True)
+    is_rejected = models.BooleanField(default=False)
+    rejection_reason = models.TextField(blank=True, null=True)
+    rejection_date = models.DateTimeField(blank=True, null=True)
     
     # Operating hours fields
     monday_open = models.TimeField(blank=True, null=True)
@@ -207,6 +210,18 @@ class VendorDocument(models.Model):
     
     def __str__(self):
         return f"Document for {self.vendor_profile.business_name}"
+
+class VendorShopImage(models.Model):
+    vendor_profile = models.ForeignKey(VendorProfile, on_delete=models.CASCADE, related_name='shop_images')
+    image = models.CharField(max_length=500)
+    is_primary = models.BooleanField(default=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-is_primary', 'uploaded_at']
+    
+    def __str__(self):
+        return f"Shop Image for {self.vendor_profile.business_name}"
 
 class VendorChangeRequest(models.Model):
     CHANGE_TYPE_CHOICES = [
@@ -254,6 +269,7 @@ class Product(models.Model):
     tags = models.JSONField(default=list)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     featured = models.BooleanField(default=False)
+    free_delivery = models.BooleanField(default=False)
     seo_title = models.CharField(max_length=200, blank=True, null=True)
     seo_description = models.TextField(blank=True, null=True)
     dynamic_fields = models.JSONField(default=dict)
@@ -262,6 +278,19 @@ class Product(models.Model):
     
     def __str__(self):
         return f"{self.name} - {self.vendor.business_name}"
+    
+    @property
+    def total_sold(self):
+        """Calculate total sold from confirmed orders"""
+        try:
+            from .order_models import OrderItem
+            total = OrderItem.objects.filter(
+                product=self,
+                order__status='confirmed'
+            ).aggregate(total=models.Sum('quantity'))['total'] or 0
+            return total
+        except:
+            return 0
 
 def product_image_upload_path(instance, filename):
     return f'products/{instance.product.vendor.id}/{filename}'
@@ -649,6 +678,22 @@ class PushNotification(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.get_recipient_type_display()}"
+
+class ProductFeaturedPurchase(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='featured_purchases')
+    vendor = models.ForeignKey(VendorProfile, on_delete=models.CASCADE, related_name='featured_purchases')
+    package = models.ForeignKey(FeaturedProductPackage, on_delete=models.CASCADE)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.product.name} - {self.package.name} ({self.start_date} to {self.end_date})"
 
 # Import message models
 from .message_models import *

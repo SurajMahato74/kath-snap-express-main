@@ -236,16 +236,37 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Are you sure you want to reject this vendor? This will permanently delete their profile.</p>
+                    <p>Are you sure you want to reject this vendor? The vendor will be marked as rejected with the reason saved.</p>
                     <div id="rejectVendorInfo"></div>
                     <div class="mb-3">
                         <label for="rejectionReason" class="form-label">Reason for rejection (optional):</label>
-                        <textarea class="form-control" id="rejectionReason" rows="3" placeholder="Please provide a reason for rejection..."></textarea>
+                        <textarea class="form-control" id="rejectionReason" rows="3"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="confirmRejectBtn">Reject & Delete</button>
+                    <button type="button" class="btn btn-danger" id="confirmRejectBtn">Reject Vendor</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div class="modal fade" id="imageViewerModal" tabindex="-1" aria-labelledby="imageViewerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="imageViewerModalLabel">Image Viewer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center p-0">
+                    <div id="imageViewerContent" style="max-height: 80vh; overflow: auto;">
+                        <!-- Image content will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a id="downloadImageBtn" href="#" download class="btn btn-primary">Download</a>
                 </div>
             </div>
         </div>
@@ -261,9 +282,12 @@
         // View Vendor Details
         function viewVendorDetails(vendorId) {
             currentVendorId = vendorId;
-            const token = '{{ request.user.auth_token.key }}';
+            const token = '{{ auth_token }}';
             
-            fetch(`/api/vendor-profiles/${vendorId}/`, {
+            console.log('Fetching vendor details for ID:', vendorId);
+            console.log('Using token:', token ? token.substring(0, 10) + '...' : 'No token');
+            
+            fetch(`/vendor-profiles/${vendorId}/`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Token ${token}`,
@@ -271,12 +295,17 @@
                 }
             })
             .then(response => {
+                console.log('Response status:', response.status);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    return response.text().then(text => {
+                        console.error('Response text:', text);
+                        throw new Error(`HTTP error! status: ${response.status} - ${text}`);
+                    });
                 }
                 return response.json();
             })
             .then(data => {
+                console.log('Vendor data received:', data);
                 displayVendorDetails(data);
                 new bootstrap.Modal(document.getElementById('vendorDetailsModal')).show();
             })
@@ -289,114 +318,123 @@
         // Display Vendor Details in Modal
         function displayVendorDetails(vendor) {
             const content = document.getElementById('vendorDetailsContent');
-            const documents = vendor.additional_docs || [];
-
-            content.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6 class="text-primary mb-3">Business Information</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>Business Name:</strong></td><td>${vendor.business_name || 'N/A'}</td></tr>
-                            <tr><td><strong>Owner Name:</strong></td><td>${vendor.owner_name || 'N/A'}</td></tr>
-                            <tr><td><strong>Business Email:</strong></td><td>${vendor.business_email || 'N/A'}</td></tr>
-                            <tr><td><strong>Business Phone:</strong></td><td>${vendor.business_phone || 'N/A'}</td></tr>
-                            <tr><td><strong>Business Type:</strong></td><td>${getBusinessTypeLabel(vendor.business_type)}</td></tr>
-                            <tr><td><strong>Categories:</strong></td><td>${Array.isArray(vendor.categories) ? vendor.categories.join(', ') : 'N/A'}</td></tr>
-                            <tr><td><strong>Description:</strong></td><td>${vendor.description || 'N/A'}</td></tr>
-                        </table>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="text-primary mb-3">Address & Location</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>Business Address:</strong></td><td>${vendor.business_address || 'N/A'}</td></tr>
-                            <tr><td><strong>Location Address:</strong></td><td>${vendor.location_address || 'N/A'}</td></tr>
-                            <tr><td><strong>City:</strong></td><td>${vendor.city || 'N/A'}</td></tr>
-                            <tr><td><strong>State:</strong></td><td>${vendor.state || 'N/A'}</td></tr>
-                            <tr><td><strong>PIN Code:</strong></td><td>${vendor.pincode || 'N/A'}</td></tr>
-                            <tr><td><strong>Latitude:</strong></td><td>${vendor.latitude || 'N/A'}</td></tr>
-                            <tr><td><strong>Longitude:</strong></td><td>${vendor.longitude || 'N/A'}</td></tr>
-                        </table>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <h6 class="text-primary mb-3">Legal & Banking</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>GST Number:</strong></td><td>${vendor.gst_number || 'N/A'}</td></tr>
-                            <tr><td><strong>PAN Number:</strong></td><td>${vendor.pan_number || 'N/A'}</td></tr>
-                            <tr><td><strong>Business License:</strong></td><td>${vendor.business_license || 'N/A'}</td></tr>
-                            <tr><td><strong>Bank Name:</strong></td><td>${vendor.bank_name || 'N/A'}</td></tr>
-                            <tr><td><strong>Account Holder:</strong></td><td>${vendor.account_holder_name || 'N/A'}</td></tr>
-                            <tr><td><strong>Account Number:</strong></td><td>${vendor.account_number || 'N/A'}</td></tr>
-                            <tr><td><strong>IFSC Code:</strong></td><td>${vendor.ifsc_code || 'N/A'}</td></tr>
-                        </table>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="text-primary mb-3">Business Settings</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>Delivery Radius:</strong></td><td>${vendor.delivery_radius ? vendor.delivery_radius + ' km' : 'N/A'}</td></tr>
-                            <tr><td><strong>Min Order Amount:</strong></td><td>${vendor.min_order_amount ? '₹' + vendor.min_order_amount : 'N/A'}</td></tr>
-                            <tr><td><strong>Status:</strong></td><td><span class="badge ${vendor.is_approved ? 'bg-success' : 'bg-warning'}">${vendor.is_approved ? 'Approved' : 'Pending'}</span></td></tr>
-                            <tr><td><strong>Applied Date:</strong></td><td>${vendor.user ? new Date(vendor.user.date_joined).toLocaleDateString() : 'N/A'}</td></tr>
-                            ${vendor.approval_date ? `<tr><td><strong>Approval Date:</strong></td><td>${new Date(vendor.approval_date).toLocaleDateString()}</td></tr>` : ''}
-                        </table>
-                    </div>
-                </div>
-                ${documents.length > 0 ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6 class="text-primary mb-3">Additional Documents</h6>
-                        <div class="list-group">
-                            ${documents.map(doc => `
-                                <a href="${doc.document}" target="_blank" class="list-group-item list-group-item-action">
-                                    <i class="fas fa-file me-2"></i>${doc.document.split('/').pop()} - Uploaded: ${new Date(doc.uploaded_at).toLocaleDateString()}
-                                </a>
-                            `).join('')}
+            
+            const documents = vendor.documents || [];
+            const shopImages = vendor.shop_images || [];
+                
+                content.innerHTML = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-primary mb-3">Business Information</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>Business Name:</strong></td><td>${vendor.business_name || 'N/A'}</td></tr>
+                                <tr><td><strong>Owner Name:</strong></td><td>${vendor.owner_name || 'N/A'}</td></tr>
+                                <tr><td><strong>Business Email:</strong></td><td>${vendor.business_email || 'N/A'}</td></tr>
+                                <tr><td><strong>Business Phone:</strong></td><td>${vendor.business_phone || 'N/A'}</td></tr>
+                                <tr><td><strong>Business Type:</strong></td><td>${getBusinessTypeLabel(vendor.business_type)}</td></tr>
+                                <tr><td><strong>Categories:</strong></td><td>${Array.isArray(vendor.categories) ? vendor.categories.join(', ') : 'N/A'}</td></tr>
+                                <tr><td><strong>Description:</strong></td><td>${vendor.description || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-primary mb-3">Address & Location</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>Business Address:</strong></td><td>${vendor.business_address || 'N/A'}</td></tr>
+                                <tr><td><strong>Location Address:</strong></td><td>${vendor.location_address || 'N/A'}</td></tr>
+                                <tr><td><strong>City:</strong></td><td>${vendor.city || 'N/A'}</td></tr>
+                                <tr><td><strong>State:</strong></td><td>${vendor.state || 'N/A'}</td></tr>
+                                <tr><td><strong>PIN Code:</strong></td><td>${vendor.pincode || 'N/A'}</td></tr>
+                                <tr><td><strong>Latitude:</strong></td><td>${vendor.latitude || 'N/A'}</td></tr>
+                                <tr><td><strong>Longitude:</strong></td><td>${vendor.longitude || 'N/A'}</td></tr>
+                            </table>
                         </div>
                     </div>
-                </div>
-                ` : ''}
-                ${vendor.business_license_file ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6 class="text-primary mb-3">Business License Document</h6>
-                        <a href="${vendor.business_license_file}" target="_blank" class="btn btn-outline-primary">
-                            <i class="fas fa-file-pdf me-2"></i>View Business License
-                        </a>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6 class="text-primary mb-3">Legal & Banking</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>GST Number:</strong></td><td>${vendor.gst_number || 'N/A'}</td></tr>
+                                <tr><td><strong>PAN Number:</strong></td><td>${vendor.pan_number || 'N/A'}</td></tr>
+                                <tr><td><strong>Business License:</strong></td><td>${vendor.business_license || 'N/A'}</td></tr>
+                                <tr><td><strong>Bank Name:</strong></td><td>${vendor.bank_name || 'N/A'}</td></tr>
+                                <tr><td><strong>Account Holder:</strong></td><td>${vendor.account_holder_name || 'N/A'}</td></tr>
+                                <tr><td><strong>Account Number:</strong></td><td>${vendor.account_number || 'N/A'}</td></tr>
+                                <tr><td><strong>IFSC Code:</strong></td><td>${vendor.ifsc_code || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-primary mb-3">Business Settings</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>Delivery Radius:</strong></td><td>${vendor.delivery_radius ? vendor.delivery_radius + ' km' : 'N/A'}</td></tr>
+                                <tr><td><strong>Min Order Amount:</strong></td><td>${vendor.min_order_amount ? '₹' + vendor.min_order_amount : 'N/A'}</td></tr>
+                                <tr><td><strong>Status:</strong></td><td><span class="badge ${vendor.is_approved ? 'bg-success' : 'bg-warning'}">${vendor.is_approved ? 'Approved' : 'Pending'}</span></td></tr>
+                                <tr><td><strong>Applied Date:</strong></td><td>${vendor.user ? new Date(vendor.user.date_joined).toLocaleDateString() : 'N/A'}</td></tr>
+                                ${vendor.approval_date ? `<tr><td><strong>Approval Date:</strong></td><td>${new Date(vendor.approval_date).toLocaleDateString()}</td></tr>` : ''}
+                            </table>
+                        </div>
                     </div>
-                </div>
-                ` : ''}
-                ${vendor.gst_certificate ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6 class="text-primary mb-3">GST Certificate</h6>
-                        <a href="${vendor.gst_certificate}" target="_blank" class="btn btn-outline-primary">
-                            <i class="fas fa-file-pdf me-2"></i>View GST Certificate
-                        </a>
+                    ${documents.length > 0 ? `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="text-primary mb-3">Uploaded Documents (${documents.length})</h6>
+                            <div class="row">
+                                ${documents.map(doc => {
+                                    const isImage = doc.document_url && (doc.document_url.includes('.jpg') || doc.document_url.includes('.jpeg') || doc.document_url.includes('.png') || doc.document_url.includes('.gif'));
+                                    return `
+                                        <div class="col-md-4 mb-3">
+                                            <div class="card">
+                                                ${isImage ? `
+                                                    <img src="${doc.document_url}" class="card-img-top" style="height: 150px; object-fit: cover;" alt="Document">
+                                                ` : `
+                                                    <div class="card-img-top d-flex align-items-center justify-content-center bg-light" style="height: 150px;">
+                                                        <i class="fas fa-file-pdf fa-3x text-danger"></i>
+                                                    </div>
+                                                `}
+                                                <div class="card-body p-2">
+                                                    <p class="card-text small mb-1">${doc.document_url ? doc.document_url.split('/').pop() : 'Document'}</p>
+                                                    <small class="text-muted">Uploaded: ${new Date(doc.uploaded_at).toLocaleDateString()}</small>
+                                                    <br><button onclick="showImageViewer('${doc.document_url}', 'Document')" class="btn btn-sm btn-outline-primary mt-1">View</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
                     </div>
-                </div>
-                ` : ''}
-                ${vendor.fssai_license ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6 class="text-primary mb-3">FSSAI License</h6>
-                        <a href="${vendor.fssai_license}" target="_blank" class="btn btn-outline-primary">
-                            <i class="fas fa-file-pdf me-2"></i>View FSSAI License
-                        </a>
+                    ` : ''}
+                    ${shopImages.length > 0 ? `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="text-primary mb-3">Shop Images (${shopImages.length})</h6>
+                            <div class="row">
+                                ${shopImages.map(img => `
+                                    <div class="col-md-3 mb-3">
+                                        <div class="card">
+                                            <img src="${img.image_url}" class="card-img-top" style="height: 120px; object-fit: cover;" alt="Shop Image">
+                                            <div class="card-body p-2">
+                                                ${img.is_primary ? '<span class="badge bg-primary mb-1">Primary</span>' : ''}
+                                                <small class="text-muted d-block">Uploaded: ${new Date(img.uploaded_at).toLocaleDateString()}</small>
+                                                <button onclick="showImageViewer('${img.image_url}', 'Shop Image')" class="btn btn-sm btn-outline-primary mt-1">View Full</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
                     </div>
-                </div>
-                ` : ''}
-                ${vendor.bank_document ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6 class="text-primary mb-3">Bank Document</h6>
-                        <a href="${vendor.bank_document}" target="_blank" class="btn btn-outline-primary">
-                            <i class="fas fa-file-pdf me-2"></i>View Bank Document
-                        </a>
+                    ` : ''}
+                    ${vendor.business_license_file ? `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="text-primary mb-3">Business License Document</h6>
+                            <button onclick="showImageViewer('${vendor.business_license_file}', 'Business License')" class="btn btn-outline-primary">
+                                <i class="fas fa-file-pdf me-2"></i>View Business License
+                            </button>
+                        </div>
                     </div>
-                </div>
-                ` : ''}
-            `;
+                    ` : ''}
+                `;
         }
 
         // Get business type label
@@ -436,9 +474,9 @@
         document.getElementById('confirmApproveBtn').addEventListener('click', function() {
             if (!currentVendorId) return;
             
-            const token = '{{ request.user.auth_token.key }}';
+            const token = '{{ auth_token }}';
 
-            fetch(`/api/admin/vendors/${currentVendorId}/approve/`, {
+            fetch(`/accounts/admin/vendors/${currentVendorId}/approve/`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Token ${token}`,
@@ -453,12 +491,10 @@
                 return response.json();
             })
             .then(data => {
-                alert('Success: ' + data.message);
                 location.reload();
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error approving vendor: ' + error.message);
             });
 
             bootstrap.Modal.getInstance(document.getElementById('approveVendorModal')).hide();
@@ -470,19 +506,20 @@
 
             const reason = document.getElementById('rejectionReason').value;
 
-            if (!confirm(`Are you sure you want to reject and delete vendor "${currentVendorName}"? This action cannot be undone.`)) {
-                return;
-            }
-            
-            const token = '{{ request.user.auth_token.key }}';
 
-            fetch(`/api/admin/vendors/${currentVendorId}/reject/`, {
-                method: 'DELETE',
+            
+            const token = '{{ auth_token }}';
+
+            fetch(`/accounts/admin/vendors/${currentVendorId}/reject/`, {
+                method: 'POST',
                 headers: {
                     'Authorization': `Token ${token}`,
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
-                }
+                },
+                body: JSON.stringify({
+                    reason: reason
+                })
             })
             .then(response => {
                 if (!response.ok) {
@@ -491,12 +528,10 @@
                 return response.json();
             })
             .then(data => {
-                alert('Success: ' + data.message);
                 location.reload();
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error rejecting vendor: ' + error.message);
             });
 
             bootstrap.Modal.getInstance(document.getElementById('rejectVendorModal')).hide();
@@ -516,6 +551,49 @@
                 }
             }
             return cookieValue;
+        }
+
+        // Show Image Viewer
+        function showImageViewer(imageUrl, title) {
+            const modal = document.getElementById('imageViewerModal');
+            const modalTitle = document.getElementById('imageViewerModalLabel');
+            const content = document.getElementById('imageViewerContent');
+            const downloadBtn = document.getElementById('downloadImageBtn');
+            
+            modalTitle.textContent = title;
+            downloadBtn.href = imageUrl;
+            downloadBtn.download = title.replace(/\s+/g, '_') + '_' + new Date().getTime();
+            
+            // Check if it's an image or PDF
+            const isImage = imageUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+            const isPdf = imageUrl.match(/\.pdf$/i);
+            
+            if (isImage) {
+                content.innerHTML = `
+                    <img src="${imageUrl}" class="img-fluid" alt="${title}" style="max-width: 100%; height: auto;">
+                `;
+            } else if (isPdf) {
+                content.innerHTML = `
+                    <div class="p-4">
+                        <div class="text-center mb-3">
+                            <i class="fas fa-file-pdf fa-5x text-danger mb-3"></i>
+                            <h5>PDF Document</h5>
+                            <p class="text-muted">Click download to view the PDF file</p>
+                        </div>
+                        <iframe src="${imageUrl}" width="100%" height="600px" style="border: none;"></iframe>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="p-4 text-center">
+                        <i class="fas fa-file fa-5x text-secondary mb-3"></i>
+                        <h5>File Preview</h5>
+                        <p class="text-muted">Preview not available. Click download to view the file.</p>
+                    </div>
+                `;
+            }
+            
+            new bootstrap.Modal(modal).show();
         }
 
         // Initialize page

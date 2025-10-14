@@ -7,10 +7,14 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
-from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification
+from django.views.decorators.csrf import csrf_exempt
+from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification, VendorDocument, VendorShopImage
 from .message_models import Conversation, Message, MessageRead
 from .order_models import Order, OrderItem, PaymentTransaction
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
+import logging
+
+logger = logging.getLogger(__name__)
 
 def login_view(request):
     if request.method == 'POST':
@@ -78,15 +82,28 @@ def manage_vendors(request):
         messages.error(request, 'Access denied.')
         return redirect('login')
 
+    logger.debug(f"manage_vendors view called by user: {request.user.username}")
+    
     # Ensure user has auth token
     from rest_framework.authtoken.models import Token
     token, created = Token.objects.get_or_create(user=request.user)
+    logger.debug(f"Auth token created/retrieved: {token.key[:10]}...")
 
-    vendor_profiles = VendorProfile.objects.all().order_by('-user__date_joined')
+    vendor_profiles = VendorProfile.objects.select_related('user').all().order_by('-user__date_joined')
+    logger.debug(f"Found {vendor_profiles.count()} vendor profiles")
+    
+    # Add documents and shop images count to each vendor profile
+    for profile in vendor_profiles:
+        profile.documents_count = VendorDocument.objects.filter(vendor_profile=profile).count()
+        profile.shop_images_count = VendorShopImage.objects.filter(vendor_profile=profile).count()
+        logger.debug(f"Profile {profile.id}: {profile.documents_count} docs, {profile.shop_images_count} images")
+    
     context = {
         'vendor_profiles': vendor_profiles,
         'auth_token': token.key
     }
+    logger.debug(f"Context prepared with {len(vendor_profiles)} profiles and token")
+    logger.debug("Rendering manage_vendors.html template")
     return render(request, 'accounts/manage_vendors.html', context)
 
 def register_view(request):
@@ -975,6 +992,65 @@ def user_profile_details(request, user_id):
         'wallet': wallet,
     }
     return render(request, 'accounts/user_profile_details.html', context)
+
+@login_required
+def admin_approve_vendor(request, vendor_id):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    try:
+        vendor_profile = VendorProfile.objects.get(id=vendor_id)
+        vendor_profile.is_approved = True
+        vendor_profile.approval_date = timezone.now()
+        vendor_profile.is_rejected = False
+        vendor_profile.rejection_reason = None
+        vendor_profile.rejection_date = None
+        vendor_profile.save()
+        
+        # Send approval email
+        from .email_notifications import send_vendor_approval_email
+        send_vendor_approval_email(vendor_profile)
+        
+        return JsonResponse({
+            'message': f'Vendor {vendor_profile.business_name} approved successfully'
+        })
+    except VendorProfile.DoesNotExist:
+        return JsonResponse({'error': 'Vendor profile not found'}, status=404)
+
+@login_required
+def admin_reject_vendor(request, vendor_id):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+
+    try:
+        import json
+        data = json.loads(request.body)
+        rejection_reason = data.get('reason', '')
+        
+        vendor_profile = VendorProfile.objects.get(id=vendor_id)
+        vendor_name = vendor_profile.business_name
+        username = vendor_profile.user.username
+
+        vendor_profile.is_rejected = True
+        vendor_profile.is_approved = False
+        vendor_profile.rejection_reason = rejection_reason
+        vendor_profile.rejection_date = timezone.now()
+        vendor_profile.save()
+
+        # Send rejection email
+        from .email_notifications import send_vendor_rejection_email
+        send_vendor_rejection_email(vendor_profile)
+
+        return JsonResponse({
+            'message': f'Vendor "{vendor_name}" ({username}) has been rejected successfully'
+        })
+    except VendorProfile.DoesNotExist:
+        return JsonResponse({'error': 'Vendor profile not found'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
 
 def api_docs(request):
     return render(request, 'accounts/api_docs.html')

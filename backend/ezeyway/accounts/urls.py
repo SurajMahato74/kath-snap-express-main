@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from django.views.decorators.csrf import csrf_exempt
 
 urlpatterns = [
     # Authentication
@@ -37,6 +38,10 @@ urlpatterns = [
     
     # Vendor Wallet
     path('vendor/wallet/', views.vendor_wallet_view, name='vendor_wallet'),
+    
+    # Admin Vendor Actions
+    path('admin/vendors/<int:vendor_id>/approve/', views.admin_approve_vendor, name='admin_approve_vendor'),
+    path('admin/vendors/<int:vendor_id>/reject/', views.admin_reject_vendor, name='admin_reject_vendor'),
     
     # API Documentation
     path('api-docs/', views.api_docs, name='api_docs'),

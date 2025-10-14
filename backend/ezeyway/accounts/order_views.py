@@ -1,6 +1,7 @@
 from rest_framework import generics, status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from django.db.models import Q, Count, Sum, Avg
 from django.shortcuts import get_object_or_404
@@ -123,6 +124,7 @@ def cancel_order_api(request, order_id):
 class VendorOrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
         if not self.request.user.is_vendor:

@@ -40,6 +40,7 @@ urlpatterns = [
     
     # Categories API
     path('categories/', api_views.get_categories_api, name='api_get_categories'),
+    path('categories/<str:category_name>/subcategories/', api_views.get_subcategories_api, name='api_get_subcategories'),
     
     # Delivery Radius API
     path('delivery-radius/', api_views.get_delivery_radius_api, name='api_get_delivery_radius'),
@@ -49,6 +50,8 @@ urlpatterns = [
     path('vendor-profiles/<int:pk>/', api_views.VendorProfileDetailView.as_view(), name='api_vendor_profile_detail'),
     path('vendor-profiles/<int:pk>/toggle-status/', api_views.vendor_toggle_status_api, name='api_vendor_toggle_status'),
     path('vendor-documents/', api_views.VendorDocumentListCreateView.as_view(), name='api_vendor_documents'),
+    path('vendor-shop-images/', api_views.VendorShopImageListCreateView.as_view(), name='api_vendor_shop_images'),
+    path('complete-onboarding/', api_views.complete_vendor_onboarding, name='api_complete_onboarding'),
     
     # Product APIs
     path('products/', api_views.ProductListCreateView.as_view(), name='api_products'),
@@ -108,6 +111,9 @@ urlpatterns = [
     # Slider APIs
     path('sliders/', api_views.get_sliders_api, name='api_get_sliders'),
     
+    # Vendor Notifications API
+    path('vendor-notifications/', api_views.vendor_notifications_api, name='api_vendor_notifications'),
+    
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='api_register_fcm_token'),
     
@@ -122,4 +128,10 @@ urlpatterns = [
     
     # Cross-domain message broadcasting
     path('broadcast/', broadcast_message, name='api_broadcast_message'),
+    
+    # Featured packages API
+    path('featured-packages/', api_views.get_featured_packages_api, name='api_get_featured_packages'),
+    path('featured-packages/purchase/', api_views.purchase_featured_package_api, name='api_purchase_featured_package'),
+    path('products/<int:product_id>/featured-info/', api_views.get_product_featured_info_api, name='api_get_product_featured_info'),
+    path('products/<int:product_id>/reschedule-featured/', api_views.reschedule_featured_package_api, name='api_reschedule_featured_package'),
 ]
