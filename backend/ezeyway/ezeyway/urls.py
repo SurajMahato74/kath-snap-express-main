@@ -45,8 +45,10 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("api/", include("accounts.api_urls")),  # API with /api/ prefix for React
     path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
-    # Serve React frontend for root URL
+    # Serve React frontend for root URL only
     re_path(r'^$', react_frontend_view, name='react_frontend'),
+    # Catch-all for React SPA routing (must be last)
+    re_path(r'^(?!admin|accounts|api|ngrok-bypass).*$', react_frontend_view, name='react_spa'),
 ]
 
 # Static files
