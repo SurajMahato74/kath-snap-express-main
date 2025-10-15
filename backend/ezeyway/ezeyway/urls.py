@@ -12,7 +12,7 @@ import os
 def api_root(request):
     return JsonResponse({
         "message": "Welcome to Ezeyway Django API",
-        "endpoints": ["/login/", "/register/", "/categories/"]
+        "endpoints": ["/api/accounts/", "/api/vendor-profiles/"]
     })
 
 def react_frontend_view(request):
@@ -27,12 +27,18 @@ def react_frontend_view(request):
 # URL patterns
 # ---------------------------
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('accounts/', include('accounts.urls')),
-    path('', include('accounts.api_urls')),  # API URLs at root for /api routing
-    
-    # React SPA catch-all (exclude admin/accounts/media/static)
-    re_path(r'^(?!admin/|accounts/|media/|static/).*$', react_frontend_view, name='react_spa'),
+    # Django API (prefix = /api/)
+    path('api/', api_root, name='api_root'),
+    path('api/admin/', admin.site.urls),
+    path('api/accounts/', include('accounts.urls')),
+    # path('api/superadmin/', include('superadmin.urls')),  # optional
+    path('api/vendor-profiles/', include('vendor_profiles.urls')),
+
+    # React SPA root
+    re_path(r'^$', react_frontend_view, name='react_frontend'),
+
+    # React SPA catch-all (exclude /api, /media, /static)
+    re_path(r'^(?!api/|media/|static/).*$', react_frontend_view, name='react_spa'),
 ]
 
 # ---------------------------
