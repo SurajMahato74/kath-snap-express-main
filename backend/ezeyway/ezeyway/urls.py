@@ -43,7 +43,7 @@ def serve_react_static(request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
-    path("", include("accounts.api_urls")),  # API at root since Passenger uses /api base
+    path("api/", include("accounts.api_urls")),  # API with /api/ prefix for React
     path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
     # Serve React frontend for root URL
     re_path(r'^$', react_frontend_view, name='react_frontend'),
