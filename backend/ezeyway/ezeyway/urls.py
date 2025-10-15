@@ -40,15 +40,19 @@ def serve_react_static(request):
     except Exception as e:
         raise Http404(f"Error serving file: {e}")
 
+def api_root_view(request):
+    return HttpResponse("Django API Root - Working!", content_type='text/plain')
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("api/", include("accounts.api_urls")),  # API with /api/ prefix for React
+    path("api", api_root_view, name='api_root'),  # Handle /api without trailing slash
     path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
     # Serve React frontend for root URL only
     re_path(r'^$', react_frontend_view, name='react_frontend'),
     # Catch-all for React SPA routing (must be last)
-    re_path(r'^(?!admin|accounts|api|ngrok-bypass).*$', react_frontend_view, name='react_spa'),
+    re_path(r'^(?!admin/|accounts/|api|ngrok-bypass/).*$', react_frontend_view, name='react_spa'),
 ]
 
 # Static files
