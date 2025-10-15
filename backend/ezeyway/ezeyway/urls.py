@@ -32,7 +32,7 @@ urlpatterns = [
     path('api/admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     # path('api/superadmin/', include('superadmin.urls')),  # optional
-    path('api/vendor-profiles/', include('vendor_profiles.urls')),
+    path('vendor-profiles/', include('vendor_profiles.urls')),
 
     # React SPA root
     re_path(r'^$', react_frontend_view, name='react_frontend'),
