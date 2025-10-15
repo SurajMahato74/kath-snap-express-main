@@ -5,7 +5,12 @@ from django.conf.urls.static import static
 from django.http import HttpResponse, JsonResponse
 import os
 
+# ---------------------------
+# Helper views
+# ---------------------------
+
 def ngrok_bypass_view(request):
+    """Ngrok bypass for development/testing"""
     response = HttpResponse("Ngrok bypass successful")
     response['ngrok-skip-browser-warning'] = 'any'
     return response
@@ -30,7 +35,7 @@ def react_frontend_view(request):
         return HttpResponse("React app not found", status=404)
 
 def serve_react_static(request):
-    """Serve static React assets"""
+    """Serve React static assets"""
     import mimetypes
     from django.http import FileResponse, Http404
     path = request.path.lstrip('/')
@@ -43,26 +48,51 @@ def serve_react_static(request):
     except Exception as e:
         raise Http404(f"Error serving file: {e}")
 
-urlpatterns = [
-    # ✅ API ROUTES
-    path("", api_root, name="api_root"),            # 👈 this fixes your main issue
-    path("admin/", admin.site.urls),
-    path("accounts/", include("accounts.urls")),
-    path("", include("accounts.api_urls")),
-    path("ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
+# ---------------------------
+# URL patterns
+# ---------------------------
 
-    # ✅ FRONTEND ROUTES
+urlpatterns = [
+    # ---------------------------
+    # API ROOT
+    # ---------------------------
+    path("api/", api_root, name="api_root"),
+
+    # ---------------------------
+    # Django Admin under /api/admin/
+    # ---------------------------
+    path("api/admin/", admin.site.urls),
+
+    # ---------------------------
+    # Django accounts API
+    # ---------------------------
+    path("api/accounts/", include("accounts.urls")),
+    path("api/", include("accounts.api_urls")),
+
+    # ---------------------------
+    # Ngrok bypass (if needed)
+    # ---------------------------
+    path("api/ngrok-bypass/", ngrok_bypass_view, name='ngrok_bypass'),
+
+    # ---------------------------
+    # React frontend root
+    # ---------------------------
     re_path(r'^$', react_frontend_view, name='react_frontend'),
 
-    # ✅ SPA Catch-all (EXCLUDING API)
-    re_path(r'^(?!admin/|accounts/|ngrok-bypass/|api/).*$', react_frontend_view, name='react_spa'),
+    # ---------------------------
+    # React SPA catch-all (exclude API/admin)
+    # ---------------------------
+    re_path(r'^(?!api/|admin/|accounts/|ngrok-bypass/).*$', react_frontend_view, name='react_spa'),
 ]
 
-# ✅ Static files config
+# ---------------------------
+# Static files
+# ---------------------------
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 else:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
+# Extra media path (redundant but safe)
 urlpatterns += static('/media/', document_root=settings.MEDIA_ROOT)
