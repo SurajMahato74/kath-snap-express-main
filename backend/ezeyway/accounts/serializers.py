@@ -602,8 +602,8 @@ class CategorySerializer(serializers.ModelSerializer):
     
     def get_icon_url(self, obj):
         if obj.icon:
-            # Always return the direct media URL without /api/ prefix
-            return f"https://ezeyway.com{obj.icon.url}"
+            # Return the icon URL as-is since it's already a full URL
+            return obj.icon.url
         return None
 
 # Import message serializers
