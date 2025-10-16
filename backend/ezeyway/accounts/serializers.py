@@ -604,7 +604,11 @@ class CategorySerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if obj.icon:
             if request:
-                return request.build_absolute_uri(obj.icon.url)
+                # Build URL without /api/ prefix to avoid double /api/ in media URLs
+                base_url = request.build_absolute_uri('/').rstrip('/')
+                if '/api' in base_url:
+                    base_url = base_url.replace('/api', '')
+                return f"{base_url}{obj.icon.url}"
             return obj.icon.url
         return None
 
