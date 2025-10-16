@@ -25,6 +25,7 @@ urlpatterns = [
     path('superadmin/', views.superadmin_dashboard, name='superadmin_dashboard'),
     path('superadmin/users/', views.manage_users, name='manage_users'),
     path('superadmin/vendors/', views.manage_vendors, name='manage_vendors'),
+    path('superadmin/analytics/', views.analytics_dashboard, name='analytics_dashboard'),
     path('superadmin/commission-ranges/', views.manage_commission_ranges, name='manage_commission_ranges'),
     path('superadmin/categories/', views.manage_categories, name='manage_categories'),
     path('superadmin/delivery-radius/', views.manage_delivery_radius, name='manage_delivery_radius'),
@@ -42,6 +43,10 @@ urlpatterns = [
     # Admin Vendor Actions
     path('admin/vendors/<int:vendor_id>/approve/', views.admin_approve_vendor, name='admin_approve_vendor'),
     path('admin/vendors/<int:vendor_id>/reject/', views.admin_reject_vendor, name='admin_reject_vendor'),
+    
+    # API Admin Vendor Actions (for AJAX calls)
+    path('api/admin/vendors/<int:vendor_id>/approve/', views.admin_approve_vendor_api, name='api_admin_approve_vendor'),
+    path('api/admin/vendors/<int:vendor_id>/reject/', views.admin_reject_vendor_api, name='api_admin_reject_vendor'),
     
     # API Documentation
     path('api-docs/', views.api_docs, name='api_docs'),

@@ -21,6 +21,9 @@ class CustomUser(AbstractUser):
     address = models.TextField(blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     profile_picture = models.CharField(max_length=500, blank=True, null=True)  # Temporarily using CharField instead of ImageField
+    profile_picture_url = models.URLField(blank=True, null=True)  # For Google profile pictures
+    google_id = models.CharField(max_length=100, blank=True, null=True, unique=True)  # Google OAuth ID
+    facebook_id = models.CharField(max_length=100, blank=True, null=True, unique=True)  # Facebook OAuth ID
 
     plain_password = models.CharField(max_length=255, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
@@ -199,6 +202,10 @@ class VendorProfile(models.Model):
     # FCM Token for push notifications
     fcm_token = models.TextField(blank=True, null=True)  # Firebase Cloud Messaging token
     fcm_updated_at = models.DateTimeField(blank=True, null=True)  # When FCM token was last updated
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
         return f"{self.business_name} - {self.user.username}"

@@ -9,9 +9,9 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'email', 'user_type', 'phone_number', 'address', 
-                  'date_of_birth', 'profile_picture', 'is_verified', 'email_verified', 
-                  'phone_verified', 'created_at', 'plain_password']
-        read_only_fields = ['id', 'created_at', 'is_verified', 'email_verified', 'phone_verified']
+                  'date_of_birth', 'profile_picture', 'profile_picture_url', 'google_id', 'is_verified', 'email_verified', 
+                  'phone_verified', 'created_at', 'plain_password', 'first_name', 'last_name']
+        read_only_fields = ['id', 'created_at', 'is_verified', 'email_verified', 'phone_verified', 'google_id']
     
     def validate_date_of_birth(self, value):
         # Convert empty string to None for DateField
@@ -145,9 +145,9 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'saturday_open', 'saturday_close', 'saturday_closed',
             'sunday_open', 'sunday_close', 'sunday_closed',
             'is_active', 'status_override', 'status_override_date',
-            'documents', 'shop_images'
+            'documents', 'shop_images', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'user', 'is_approved', 'approval_date', 'is_rejected', 'rejection_reason', 'rejection_date', 'is_active']
+        read_only_fields = ['id', 'user', 'is_approved', 'approval_date', 'is_rejected', 'rejection_reason', 'rejection_date', 'is_active', 'created_at', 'updated_at']
     
     def update(self, instance, validated_data):
         # Reset rejection status when vendor updates profile

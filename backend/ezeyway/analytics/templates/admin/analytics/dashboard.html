@@ -1,0 +1,161 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block extrahead %}
+<style>
+.analytics-dashboard {
+    padding: 20px;
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+.stat-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.stat-number {
+    font-size: 2em;
+    font-weight: bold;
+    color: #0073aa;
+}
+.stat-label {
+    color: #666;
+    margin-top: 5px;
+}
+.chart-container {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.table-container {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="analytics-dashboard">
+    <h1>Website Analytics Dashboard</h1>
+    
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number">{{ today_visitors }}</div>
+            <div class="stat-label">Today's Visitors</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ today_pageviews }}</div>
+            <div class="stat-label">Today's Page Views</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ week_visitors }}</div>
+            <div class="stat-label">This Week's Visitors</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ month_visitors }}</div>
+            <div class="stat-label">This Month's Visitors</div>
+        </div>
+    </div>
+    
+    <!-- Traffic Sources -->
+    <div class="chart-container">
+        <h2>Top Traffic Sources</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Visitors</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for source in top_sources %}
+                <tr>
+                    <td>{{ source.source|title }}</td>
+                    <td>{{ source.count }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="2">No data available</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Device Breakdown -->
+    <div class="chart-container">
+        <h2>Device Types</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>Visitors</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for device in device_stats %}
+                <tr>
+                    <td>{{ device.device_type|title }}</td>
+                    <td>{{ device.count }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="2">No data available</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Top Pages -->
+    <div class="table-container">
+        <h2>Most Visited Pages</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Page URL</th>
+                    <th>Views</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for page in top_pages %}
+                <tr>
+                    <td>{{ page.page_url }}</td>
+                    <td>{{ page.count }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="2">No data available</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

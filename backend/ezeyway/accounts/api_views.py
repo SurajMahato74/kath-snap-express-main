@@ -27,6 +27,40 @@ from .serializers import (
     WalletTransactionSerializer, AddMoneySerializer, CustomerProductSerializer,
     UserFavoriteSerializer, CartSerializer, CartItemSerializer, CategorySerializer
 )
+
+# Add password setup API for Google OAuth users
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def setup_password_api(request):
+    """Allow Google OAuth users to set up password for traditional login"""
+    try:
+        user = request.user
+        new_password = request.data.get('password')
+        
+        if not new_password:
+            return Response({'error': 'Password is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if len(new_password) < 6:
+            return Response({'error': 'Password must be at least 6 characters'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Set password for the user
+        user.set_password(new_password)
+        user.plain_password = new_password  # Store plain password as per existing pattern
+        user.save()
+        
+        # Generate new token
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
+        
+        return Response({
+            'success': True,
+            'message': 'Password set successfully. You can now login with email and password.',
+            'token': token.key
+        })
+        
+    except Exception as e:
+        logger.error(f"Password setup error: {str(e)}")
+        return Response({'error': 'Failed to set password'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
 from accounts import serializers
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -202,13 +236,7 @@ def conversations_api(request):
 @permission_classes([permissions.IsAuthenticated])
 def toggle_vendor_status_api(request):
     try:
-        if not request.user.is_vendor:
-            return Response({
-                'success': False,
-                'error': 'Not a vendor account'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         
         # Toggle the status
         vendor_profile.is_active = not vendor_profile.is_active
@@ -237,15 +265,7 @@ def toggle_vendor_status_api(request):
 def vendor_status_api(request):
     from django.http import JsonResponse
     try:
-        if not request.user.is_vendor:
-            return JsonResponse({
-                'success': False,
-                'error': 'Not a vendor account',
-                'profile_exists': False,
-                'is_approved': False
-            })
-        
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         return JsonResponse({
             'success': True,
             'profile_exists': True,
@@ -1002,26 +1022,20 @@ def set_primary_image(request, product_id, image_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def vendor_wallet_api(request):
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
         
         serializer = VendorWalletSerializer(wallet, context={'request': request})
         return Response(serializer.data)
     except VendorProfile.DoesNotExist:
-        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def wallet_transactions_api(request):
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         wallet = VendorWallet.objects.get(vendor=vendor_profile)
         
         # Get query parameters for filtering
@@ -1063,7 +1077,9 @@ def wallet_transactions_api(request):
             'page_size': page_size,
             'total_pages': (total_count + page_size - 1) // page_size
         })
-    except (VendorProfile.DoesNotExist, VendorWallet.DoesNotExist):
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
+    except VendorWallet.DoesNotExist:
         return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
@@ -1072,11 +1088,8 @@ def initiate_khalti_payment(request):
     import requests
     import json
     
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         amount = float(request.data.get('amount', 0))
         
         if amount <= 0:
@@ -1132,15 +1145,12 @@ def initiate_khalti_payment(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_money_api(request):
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
-    
     serializer = AddMoneySerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
         
         amount = serializer.validated_data['amount']
@@ -1674,27 +1684,28 @@ def switch_role_api(request):
 
     user = request.user
 
-    # Check if user can switch to this role
-    if new_role == 'customer' and not user.is_customer:
-        return Response({'error': 'Customer role not available'}, status=status.HTTP_400_BAD_REQUEST)
-
+    # Check if user can switch to vendor role
     if new_role == 'vendor':
-        if not user.is_vendor:
-            return Response({'error': 'Vendor role not available'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             vendor_profile = VendorProfile.objects.get(user=user)
             if not vendor_profile.is_approved:
                 return Response({'error': 'Vendor profile not approved'}, status=status.HTTP_400_BAD_REQUEST)
         except VendorProfile.DoesNotExist:
-            return Response({'error': 'Vendor profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Vendor role not available'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Update user type
-    user.user_type = new_role
-    user.save()
+    # Update user type using database update to avoid property conflicts
+    CustomUser.objects.filter(id=user.id).update(user_type=new_role)
+    user.refresh_from_db()
+
+    # Get updated available roles
+    available_roles = ['customer']
+    if new_role == 'vendor' or VendorProfile.objects.filter(user=user, is_approved=True).exists():
+        available_roles.append('vendor')
 
     return Response({
         'message': f'Switched to {new_role}',
         'current_role': new_role,
+        'available_roles': available_roles,
         'user': UserSerializer(user).data
     })
 
@@ -1703,9 +1714,6 @@ def switch_role_api(request):
 def verify_khalti_payment(request):
     import requests
     import json
-    
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
         pidx = request.data.get('pidx')
@@ -1729,7 +1737,7 @@ def verify_khalti_payment(request):
             payment_data = response.json()
             
             if payment_data.get('status') == 'Completed':
-                vendor_profile = VendorProfile.objects.get(user=request.user)
+                vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
                 wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
                 
                 from decimal import Decimal
@@ -1791,21 +1799,18 @@ def register_fcm_token_api(request):
             return Response({'error': 'FCM token is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Update vendor profile with FCM token
-        if request.user.is_vendor:
-            try:
-                vendor_profile = VendorProfile.objects.get(user=request.user)
-                vendor_profile.fcm_token = fcm_token
-                vendor_profile.fcm_updated_at = timezone.now()
-                vendor_profile.save()
-                
-                return Response({
-                    'success': True,
-                    'message': 'FCM token registered successfully',
-                    'platform': platform
-                })
-            except VendorProfile.DoesNotExist:
-                return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        else:
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            vendor_profile.fcm_token = fcm_token
+            vendor_profile.fcm_updated_at = timezone.now()
+            vendor_profile.save()
+            
+            return Response({
+                'success': True,
+                'message': 'FCM token registered successfully',
+                'platform': platform
+            })
+        except VendorProfile.DoesNotExist:
             # For customers, you can store FCM token in user profile or separate model
             return Response({
                 'success': True,
@@ -1821,12 +1826,7 @@ def register_fcm_token_api(request):
 def test_fcm_notification_api(request):
     """Send test FCM notification to current vendor"""
     try:
-        if not request.user.is_vendor:
-            return Response({
-                'error': 'Only vendors can send test notifications'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         
         if not vendor_profile.fcm_token:
             return Response({
@@ -2134,11 +2134,8 @@ def get_sliders_api(request):
 @permission_classes([permissions.IsAuthenticated])
 def vendor_notifications_api(request):
     """Get vendor notifications (orders, refunds, stock alerts, status changes)"""
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied. Vendor account required.'}, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         
         # Return empty notifications - real notifications will be created by actual events
         notifications = []
@@ -2149,6 +2146,321 @@ def vendor_notifications_api(request):
         })
         
     except VendorProfile.DoesNotExist:
-        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def facebook_oauth_api(request):
+    """Handle Facebook OAuth authentication - follows existing login flow completely"""
+    try:
+        import json
+        
+        data = json.loads(request.body)
+        user_info = data.get('user_info')
+        
+        if not user_info:
+            return Response({'error': 'Facebook user info required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        facebook_id = user_info.get('facebook_id')
+        email = user_info.get('email')
+        name = user_info.get('name', '')
+        picture = user_info.get('picture', '')
+        
+        logger.info(f"Processing Facebook OAuth for user: {email}")
+        
+        if not email or not facebook_id:
+            return Response({'error': 'Missing required Facebook user data'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if user exists by email or facebook_id
+        user_created = False
+        user = None
+        
+        # First try to find by facebook_id
+        if facebook_id:
+            try:
+                user = CustomUser.objects.get(facebook_id=facebook_id)
+            except CustomUser.DoesNotExist:
+                pass
+        
+        # If not found by facebook_id, try by email
+        if not user:
+            try:
+                user = CustomUser.objects.get(email=email)
+                # Link Facebook account to existing user
+                if not user.facebook_id:
+                    user.facebook_id = facebook_id
+                    user.save()
+            except CustomUser.DoesNotExist:
+                pass
+        
+        # Create new user if not found
+        if not user:
+            # Generate unique username from email
+            username = email.split('@')[0]
+            counter = 1
+            original_username = username
+            while CustomUser.objects.filter(username=username).exists():
+                username = f"{original_username}{counter}"
+                counter += 1
+            
+            # Create user following exact registration flow
+            user = CustomUser.objects.create_user(
+                username=username,
+                email=email,
+                password=None,  # No password initially - user can set later
+                first_name=name.split(' ')[0] if name else '',
+                last_name=' '.join(name.split(' ')[1:]) if len(name.split(' ')) > 1 else '',
+                facebook_id=facebook_id,
+                profile_picture_url=picture,
+                email_verified=True,  # Facebook emails are verified
+                is_verified=True,
+                user_type='customer'  # Default to customer
+            )
+            # Set database fields directly after creation to avoid property conflicts
+            CustomUser.objects.filter(id=user.id).update(is_customer=True, is_vendor=False)
+            user.refresh_from_db()
+            user_created = True
+            logger.info(f"Created new Facebook OAuth user: {user.email}")
+        else:
+            # Update existing user info
+            updated = False
+            if picture and user.profile_picture_url != picture:
+                user.profile_picture_url = picture
+                updated = True
+            if not user.first_name and name:
+                user.first_name = name.split(' ')[0]
+                user.last_name = ' '.join(name.split(' ')[1:]) if len(name.split(' ')) > 1 else ''
+                updated = True
+            if not user.email_verified:
+                user.email_verified = True
+                user.is_verified = True
+                updated = True
+            if updated:
+                user.save()
+                logger.info(f"Updated existing Facebook OAuth user: {user.email}")
+        
+        # Generate or get auth token (same as login flow)
+        token, created = Token.objects.get_or_create(user=user)
+        
+        # Check vendor profile status (EXACT same logic as login_api)
+        try:
+            vendor_profile = VendorProfile.objects.get(user=user)
+            profile_exists = True
+            is_approved = vendor_profile.is_approved
+            is_rejected = vendor_profile.is_rejected
+            rejection_reason = vendor_profile.rejection_reason
+            rejection_date = vendor_profile.rejection_date
+        except VendorProfile.DoesNotExist:
+            profile_exists = False
+            is_approved = False
+            is_rejected = False
+            rejection_reason = None
+            rejection_date = None
+        
+        # Determine available roles (EXACT same logic as login_api)
+        available_roles = ['customer']  # All users can be customers
+        
+        # Check if user can be a vendor (has approved profile)
+        if profile_exists and is_approved:
+            available_roles.append('vendor')
+        
+        # Get user serialized data and add available_roles to it
+        user_data = UserSerializer(user).data
+        user_data['available_roles'] = available_roles
+        
+        # Return EXACT same structure as login_api
+        return Response({
+            'success': True,
+            'token': token.key,
+            'user': user_data,
+            'available_roles': available_roles,
+            'current_role': user.user_type,
+            'profile_exists': profile_exists,
+            'is_approved': is_approved,
+            'is_rejected': is_rejected if is_rejected is not None else False,
+            'rejection_reason': rejection_reason,
+            'rejection_date': rejection_date.isoformat() if rejection_date else None,
+            'message': 'Facebook OAuth login successful',
+            'user_created': user_created,  # Additional flag for new users
+            'needs_password_setup': not user.has_usable_password(),  # Flag for password setup
+            'facebook_login': True,  # Flag to indicate Facebook login
+            'needs_profile_completion': user_created or not user.phone_number  # Flag for profile completion
+        })
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {str(e)}")
+        return Response({'error': 'Invalid JSON data'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Facebook OAuth error: {str(e)}")
+        import traceback
+        logger.error(f"Facebook OAuth traceback: {traceback.format_exc()}")
+        return Response({'error': f'Authentication failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def google_oauth_api(request):
+    """Handle Google OAuth authentication - follows existing login flow completely"""
+    try:
+        import json
+        
+        data = json.loads(request.body)
+        user_info = data.get('user_info')
+        
+        if not user_info:
+            return Response({'error': 'Google user info required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        google_id = user_info.get('google_id')
+        email = user_info.get('email')
+        name = user_info.get('name', '')
+        picture = user_info.get('picture', '')
+        
+        logger.info(f"Processing Google OAuth for user: {email}")
+        
+        if not email or not google_id:
+            return Response({'error': 'Missing required Google user data'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if user exists by email or google_id
+        user_created = False
+        user = None
+        
+        # First try to find by google_id
+        if google_id:
+            try:
+                user = CustomUser.objects.get(google_id=google_id)
+            except CustomUser.DoesNotExist:
+                pass
+        
+        # If not found by google_id, try by email
+        if not user:
+            try:
+                user = CustomUser.objects.get(email=email)
+                # Link Google account to existing user
+                if not user.google_id:
+                    user.google_id = google_id
+                    user.save()
+            except CustomUser.DoesNotExist:
+                pass
+        
+        # Create new user if not found
+        if not user:
+            # Generate unique username from email
+            username = email.split('@')[0]
+            counter = 1
+            original_username = username
+            while CustomUser.objects.filter(username=username).exists():
+                username = f"{original_username}{counter}"
+                counter += 1
+            
+            # Create user following exact registration flow
+            user = CustomUser.objects.create_user(
+                username=username,
+                email=email,
+                password=None,  # No password initially - user can set later
+                first_name=name.split(' ')[0] if name else '',
+                last_name=' '.join(name.split(' ')[1:]) if len(name.split(' ')) > 1 else '',
+                google_id=google_id,
+                profile_picture_url=picture,
+                email_verified=True,  # Google emails are verified
+                is_verified=True,
+                user_type='customer'  # Default to customer
+            )
+            # Set database fields directly after creation to avoid property conflicts
+            CustomUser.objects.filter(id=user.id).update(is_customer=True, is_vendor=False)
+            user.refresh_from_db()
+            user_created = True
+            logger.info(f"Created new Google OAuth user: {user.email}")
+        else:
+            # Update existing user info
+            updated = False
+            if picture and user.profile_picture_url != picture:
+                user.profile_picture_url = picture
+                updated = True
+            if not user.first_name and name:
+                user.first_name = name.split(' ')[0]
+                user.last_name = ' '.join(name.split(' ')[1:]) if len(name.split(' ')) > 1 else ''
+                updated = True
+            if not user.email_verified:
+                user.email_verified = True
+                user.is_verified = True
+                updated = True
+            if updated:
+                user.save()
+                logger.info(f"Updated existing Google OAuth user: {user.email}")
+        
+        # Generate or get auth token (same as login flow)
+        token, created = Token.objects.get_or_create(user=user)
+        
+        # Check vendor profile status (EXACT same logic as login_api)
+        try:
+            vendor_profile = VendorProfile.objects.get(user=user)
+            profile_exists = True
+            is_approved = vendor_profile.is_approved
+            is_rejected = vendor_profile.is_rejected
+            rejection_reason = vendor_profile.rejection_reason
+            rejection_date = vendor_profile.rejection_date
+        except VendorProfile.DoesNotExist:
+            profile_exists = False
+            is_approved = False
+            is_rejected = False
+            rejection_reason = None
+            rejection_date = None
+        
+        # Determine available roles (EXACT same logic as login_api)
+        available_roles = ['customer']  # All users can be customers
+        
+        # Check if user can be a vendor (has approved profile)
+        if profile_exists and is_approved:
+            available_roles.append('vendor')
+        
+        # Note: We don't update is_vendor/is_customer database fields here
+        # because they conflict with computed properties in the model
+        # The role logic is handled by available_roles and user_type
+        
+        # Get user serialized data and add available_roles to it
+        user_data = UserSerializer(user).data
+        user_data['available_roles'] = available_roles
+        
+        # Return EXACT same structure as login_api
+        return Response({
+            'success': True,
+            'token': token.key,
+            'user': user_data,
+            'available_roles': available_roles,
+            'current_role': user.user_type,
+            'profile_exists': profile_exists,
+            'is_approved': is_approved,
+            'is_rejected': is_rejected if is_rejected is not None else False,
+            'rejection_reason': rejection_reason,
+            'rejection_date': rejection_date.isoformat() if rejection_date else None,
+            'message': 'Google OAuth login successful',
+            'user_created': user_created,  # Additional flag for new users
+            'needs_password_setup': not user.has_usable_password(),  # Flag for password setup
+            'google_login': True,  # Flag to indicate Google login
+            'needs_profile_completion': user_created or not user.phone_number  # Flag for profile completion
+        })
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {str(e)}")
+        return Response({'error': 'Invalid JSON data'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Google OAuth error: {str(e)}")
+        import traceback
+        logger.error(f"Google OAuth traceback: {traceback.format_exc()}")
+        return Response({'error': f'Authentication failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def check_password_setup_api(request):
+    """Check if user needs to set up password (for Google OAuth users)"""
+    try:
+        user = request.user
+        return Response({
+            'needs_password_setup': not user.has_usable_password(),
+            'has_google_account': bool(user.google_id),
+            'email': user.email
+        })
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

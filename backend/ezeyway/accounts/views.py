@@ -8,6 +8,9 @@ from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
 from django.views.decorators.csrf import csrf_exempt
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+import json
 from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification, VendorDocument, VendorShopImage
 from .message_models import Conversation, Message, MessageRead
 from .order_models import Order, OrderItem, PaymentTransaction
@@ -66,6 +69,125 @@ def superadmin_dashboard(request):
     }
     
     return render(request, 'accounts/superadmin_dashboard.html', context)
+
+@login_required
+def analytics_dashboard(request):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    try:
+        from analytics.models import Visitor, PageView, TrafficSource
+        from django.core.paginator import Paginator
+        
+        today = timezone.now().date()
+        week_ago = today - timedelta(days=30)  # Extended to 30 days to catch Oct 16 data
+        month_ago = today - timedelta(days=60)  # Extended to 60 days
+        yesterday = today - timedelta(days=1)
+        
+        # Today's stats (accurate date filtering)
+        today_visitors = Visitor.objects.filter(first_visit__date=today).count()
+        today_pageviews = PageView.objects.filter(timestamp__date=today).count()
+        yesterday_visitors = Visitor.objects.filter(first_visit__date=yesterday).count()
+        
+        # Week stats - show actual data from last 30 days or all data if empty
+        week_visitors = Visitor.objects.filter(first_visit__date__gte=week_ago).count()
+        if week_visitors == 0:
+            week_visitors = Visitor.objects.count()
+            
+        week_pageviews = PageView.objects.filter(timestamp__date__gte=week_ago).count()
+        if week_pageviews == 0:
+            week_pageviews = PageView.objects.count()
+        
+        # Month stats - show actual data from last 60 days or all data if empty
+        month_visitors = Visitor.objects.filter(first_visit__date__gte=month_ago).count()
+        if month_visitors == 0:
+            month_visitors = Visitor.objects.count()
+            
+        month_pageviews = PageView.objects.filter(timestamp__date__gte=month_ago).count()
+        if month_pageviews == 0:
+            month_pageviews = PageView.objects.count()
+        
+        # Calculate growth percentages
+        today_growth = ((today_visitors - yesterday_visitors) / max(yesterday_visitors, 1)) * 100 if yesterday_visitors > 0 else 0
+        
+        # Top traffic sources with pagination
+        sources_page = request.GET.get('sources_page', 1)
+        top_sources_all = TrafficSource.objects.values('source').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        sources_paginator = Paginator(top_sources_all, 5)
+        top_sources = sources_paginator.get_page(sources_page)
+        
+        # Top pages with pagination
+        pages_page = request.GET.get('pages_page', 1)
+        top_pages_all = PageView.objects.values('page_url', 'page_title').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        pages_paginator = Paginator(top_pages_all, 10)
+        top_pages = pages_paginator.get_page(pages_page)
+        
+        # Device breakdown
+        device_stats = Visitor.objects.values('device_type').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # Recent visitors with pagination
+        visitors_page = request.GET.get('visitors_page', 1)
+        recent_visitors_all = Visitor.objects.select_related('user').order_by('-last_visit')
+        visitors_paginator = Paginator(recent_visitors_all, 20)
+        recent_visitors = visitors_paginator.get_page(visitors_page)
+        
+        # Country stats
+        country_stats = Visitor.objects.exclude(country__isnull=True).exclude(country='').values('country').annotate(
+            count=Count('id')
+        ).order_by('-count')[:10]
+        
+        # Browser stats
+        browser_stats = Visitor.objects.exclude(browser__isnull=True).exclude(browser='').values('browser').annotate(
+            count=Count('id')
+        ).order_by('-count')[:5]
+        
+        context = {
+            'today_visitors': today_visitors,
+            'today_pageviews': today_pageviews,
+            'week_visitors': week_visitors,
+            'week_pageviews': week_pageviews,
+            'month_visitors': month_visitors,
+            'month_pageviews': month_pageviews,
+            'today_growth': round(today_growth, 1),
+            'top_sources': top_sources,
+            'top_pages': top_pages,
+            'device_stats': device_stats,
+            'recent_visitors': recent_visitors,
+            'country_stats': country_stats,
+            'browser_stats': browser_stats,
+            'total_visitors': Visitor.objects.count(),
+            'total_pageviews': PageView.objects.count(),
+        }
+        
+        return render(request, 'accounts/analytics_dashboard.html', context)
+        
+    except ImportError:
+        # If analytics module is not available, show empty data
+        context = {
+            'today_visitors': 0,
+            'today_pageviews': 0,
+            'week_visitors': 0,
+            'week_pageviews': 0,
+            'month_visitors': 0,
+            'month_pageviews': 0,
+            'today_growth': 0,
+            'top_sources': [],
+            'top_pages': [],
+            'device_stats': [],
+            'recent_visitors': [],
+            'country_stats': [],
+            'browser_stats': [],
+            'total_visitors': 0,
+            'total_pageviews': 0,
+        }
+        return render(request, 'accounts/analytics_dashboard.html', context)
 
 @login_required
 def manage_users(request):
@@ -1054,3 +1176,71 @@ def admin_reject_vendor(request, vendor_id):
 
 def api_docs(request):
     return render(request, 'accounts/api_docs.html')
+
+@csrf_exempt
+@login_required
+def admin_approve_vendor_api(request, vendor_id):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        vendor_profile = VendorProfile.objects.get(id=vendor_id)
+        vendor_profile.is_approved = True
+        vendor_profile.approval_date = timezone.now()
+        vendor_profile.is_rejected = False
+        vendor_profile.rejection_reason = None
+        vendor_profile.rejection_date = None
+        vendor_profile.save()
+        
+        # Send approval email
+        from .email_notifications import send_vendor_approval_email
+        send_vendor_approval_email(vendor_profile)
+        
+        return JsonResponse({
+            'message': f'Vendor {vendor_profile.business_name} approved successfully'
+        })
+    except VendorProfile.DoesNotExist:
+        return JsonResponse({'error': 'Vendor profile not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@login_required
+def admin_reject_vendor_api(request, vendor_id):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+
+    try:
+        import json
+        data = json.loads(request.body)
+        rejection_reason = data.get('reason', '')
+        
+        vendor_profile = VendorProfile.objects.get(id=vendor_id)
+        vendor_name = vendor_profile.business_name
+        username = vendor_profile.user.username
+
+        vendor_profile.is_rejected = True
+        vendor_profile.is_approved = False
+        vendor_profile.rejection_reason = rejection_reason
+        vendor_profile.rejection_date = timezone.now()
+        vendor_profile.save()
+
+        # Send rejection email
+        from .email_notifications import send_vendor_rejection_email
+        send_vendor_rejection_email(vendor_profile)
+
+        return JsonResponse({
+            'message': f'Vendor "{vendor_name}" ({username}) has been rejected successfully'
+        })
+    except VendorProfile.DoesNotExist:
+        return JsonResponse({'error': 'Vendor profile not found'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

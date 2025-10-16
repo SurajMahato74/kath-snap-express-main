@@ -13,6 +13,10 @@ urlpatterns = [
     path('register/', api_views.register_api, name='api_register'),
     path('login/', api_views.login_api, name='api_login'),
     path('logout/', api_views.logout_api, name='api_logout'),
+    path('auth/google/', api_views.google_oauth_api, name='api_google_oauth'),
+    path('auth/facebook/', api_views.facebook_oauth_api, name='api_facebook_oauth'),
+    path('setup-password/', api_views.setup_password_api, name='api_setup_password'),
+    path('check-password-setup/', api_views.check_password_setup_api, name='api_check_password_setup'),
     
     # Profile APIs
     path('profile/', api_views.profile_api, name='api_profile'),

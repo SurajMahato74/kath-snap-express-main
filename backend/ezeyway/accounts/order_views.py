@@ -127,11 +127,8 @@ class VendorOrderListView(generics.ListAPIView):
     pagination_class = PageNumberPagination
     
     def get_queryset(self):
-        if not self.request.user.is_vendor:
-            return Order.objects.none()
-        
         try:
-            vendor_profile = VendorProfile.objects.get(user=self.request.user)
+            vendor_profile = VendorProfile.objects.get(user=self.request.user, is_approved=True)
             queryset = Order.objects.filter(vendor=vendor_profile)
             
             # Filter by status
@@ -155,8 +152,6 @@ class VendorOrderListView(generics.ListAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def update_order_status_api(request, order_id):
     """Update order status (vendor only)"""
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
         vendor_profile = VendorProfile.objects.get(user=request.user)
@@ -443,12 +438,11 @@ def admin_process_refund_api(request, refund_id):
         
         # Check if user has permission (admin or vendor of the order)
         has_permission = request.user.is_superuser
-        if request.user.is_vendor:
-            try:
-                vendor_profile = VendorProfile.objects.get(user=request.user)
-                has_permission = refund.order.vendor == vendor_profile
-            except VendorProfile.DoesNotExist:
-                has_permission = False
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            has_permission = refund.order.vendor == vendor_profile
+        except VendorProfile.DoesNotExist:
+            pass
         
         if not has_permission:
             return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
@@ -569,11 +563,8 @@ def update_delivery_location_api(request, delivery_id):
 @permission_classes([permissions.IsAuthenticated])
 def vendor_pending_orders_api(request):
     """Get pending orders for vendor"""
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
-    
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
+        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
         orders = Order.objects.filter(
             vendor=vendor_profile, 
             status='pending'
@@ -583,14 +574,12 @@ def vendor_pending_orders_api(request):
         return Response(serializer.data)
         
     except VendorProfile.DoesNotExist:
-        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def vendor_accept_order_api(request, order_id):
     """Accept an order (vendor only)"""
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
         vendor_profile = VendorProfile.objects.get(user=request.user)
@@ -659,8 +648,6 @@ def vendor_accept_order_api(request, order_id):
 @permission_classes([permissions.IsAuthenticated])
 def vendor_reject_order_api(request, order_id):
     """Reject an order (vendor only)"""
-    if not request.user.is_vendor:
-        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
         vendor_profile = VendorProfile.objects.get(user=request.user)
@@ -708,12 +695,11 @@ def upload_refund_document_api(request, refund_id):
         
         # Check permission
         has_permission = request.user.is_superuser or refund.customer == request.user
-        if request.user.is_vendor:
-            try:
-                vendor_profile = VendorProfile.objects.get(user=request.user)
-                has_permission = refund.order.vendor == vendor_profile
-            except VendorProfile.DoesNotExist:
-                pass
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            has_permission = refund.order.vendor == vendor_profile
+        except VendorProfile.DoesNotExist:
+            pass
         
         if not has_permission:
             return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)

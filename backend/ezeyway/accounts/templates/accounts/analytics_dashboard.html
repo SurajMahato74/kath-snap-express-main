@@ -1,0 +1,406 @@
+{% extends 'accounts/superadmin_base.html' %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.stat-card {
+    background: white;
+    border: 1px solid #e3e6f0;
+    border-radius: 0.35rem;
+    padding: 1.5rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    text-align: center;
+    transition: all 0.3s;
+    height: 100%;
+}
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.25rem 2rem 0 rgba(58, 59, 69, 0.2);
+}
+.stat-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    line-height: 1;
+}
+.stat-label {
+    color: #5a5c69;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.chart-container, .table-container {
+    background: white;
+    border: 1px solid #e3e6f0;
+    border-radius: 0.35rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+}
+.visitor-info {
+    font-size: 12px;
+    color: #666;
+}
+.source-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+}
+.source-facebook { background: #1877f2; color: white; }
+.source-google { background: #4285f4; color: white; }
+.source-direct { background: #28a745; color: white; }
+.source-referral { background: #6c757d; color: white; }
+.source-unknown { background: #ffc107; color: #212529; }
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+    .stat-number {
+        font-size: 2rem;
+    }
+    .chart-container, .table-container {
+        padding: 1rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-chart-bar me-2"></i>Analytics Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+        </div>
+    </div>
+</div>
+    
+<!-- Stats Overview -->
+<div class="stats-grid">
+    <div class="stat-card border-start border-primary border-4">
+        <div class="stat-number text-primary">{{ today_visitors }}</div>
+        <div class="stat-label">Today's Visitors</div>
+        {% if today_growth != 0 %}
+        <small class="text-{% if today_growth > 0 %}success{% else %}danger{% endif %}">
+            <i class="fas fa-arrow-{% if today_growth > 0 %}up{% else %}down{% endif %} me-1"></i>
+            {{ today_growth }}% from yesterday
+        </small>
+        {% endif %}
+    </div>
+    <div class="stat-card border-start border-success border-4">
+        <div class="stat-number text-success">{{ today_pageviews }}</div>
+        <div class="stat-label">Today's Page Views</div>
+        <small class="text-muted">{{ total_pageviews }} total</small>
+    </div>
+    <div class="stat-card border-start border-info border-4">
+        <div class="stat-number text-info">{{ week_visitors }}</div>
+        <div class="stat-label">This Week's Visitors</div>
+        <small class="text-muted">Last 7 days</small>
+    </div>
+    <div class="stat-card border-start border-warning border-4">
+        <div class="stat-number text-warning">{{ month_visitors }}</div>
+        <div class="stat-label">This Month's Visitors</div>
+        <small class="text-muted">{{ total_visitors }} total</small>
+    </div>
+</div>
+    
+<div class="row">
+    <div class="col-lg-4 col-md-6">
+        <!-- Traffic Sources -->
+        <div class="chart-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-globe me-2"></i>Traffic Sources</h5>
+                <small class="text-muted">Page {{ top_sources.number }} of {{ top_sources.paginator.num_pages }}</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="border-0">Source</th>
+                            <th class="border-0 text-end">Visitors</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for source in top_sources %}
+                        <tr>
+                            <td class="align-middle">
+                                <span class="source-badge source-{{ source.source|default:'unknown' }}">
+                                    {{ source.source|title|default:'Unknown' }}
+                                </span>
+                            </td>
+                            <td class="align-middle text-end">
+                                <span class="fw-bold">{{ source.count }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted py-4">
+                                <i class="fas fa-chart-pie fa-2x mb-2 d-block"></i>
+                                No traffic data available
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if top_sources.has_other_pages %}
+            <div class="d-flex justify-content-center mt-3">
+                <nav>
+                    <ul class="pagination pagination-sm">
+                        {% if top_sources.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?sources_page={{ top_sources.previous_page_number }}">‹</a></li>
+                        {% endif %}
+                        <li class="page-item active"><span class="page-link">{{ top_sources.number }}</span></li>
+                        {% if top_sources.has_next %}
+                            <li class="page-item"><a class="page-link" href="?sources_page={{ top_sources.next_page_number }}">›</a></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="col-lg-4 col-md-6">
+        <!-- Device Breakdown -->
+        <div class="chart-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-devices me-2"></i>Devices</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="border-0">Device</th>
+                            <th class="border-0 text-end">Visitors</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for device in device_stats %}
+                        <tr>
+                            <td class="align-middle">
+                                <i class="fas fa-{% if device.device_type == 'mobile' %}mobile-alt{% elif device.device_type == 'tablet' %}tablet-alt{% else %}desktop{% endif %} me-2 text-muted"></i>
+                                {{ device.device_type|title }}
+                            </td>
+                            <td class="align-middle text-end">
+                                <span class="fw-bold">{{ device.count }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted py-4">
+                                <i class="fas fa-mobile-alt fa-2x mb-2 d-block"></i>
+                                No device data available
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 col-md-12">
+        <!-- Countries -->
+        <div class="chart-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-map me-2"></i>Top Countries</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="border-0">Country</th>
+                            <th class="border-0 text-end">Visitors</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for country in country_stats %}
+                        <tr>
+                            <td class="align-middle">
+                                <i class="fas fa-flag me-2 text-muted"></i>
+                                {{ country.country }}
+                            </td>
+                            <td class="align-middle text-end">
+                                <span class="fw-bold">{{ country.count }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted py-4">
+                                <i class="fas fa-globe fa-2x mb-2 d-block"></i>
+                                No location data available
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+    
+<!-- Recent Visitors -->
+<div class="table-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-users me-2"></i>Recent Visitors</h5>
+        <small class="text-muted">Page {{ recent_visitors.number }} of {{ recent_visitors.paginator.num_pages }}</small>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="border-0">IP Address</th>
+                    <th class="border-0 d-none d-md-table-cell">User</th>
+                    <th class="border-0 d-none d-lg-table-cell">Location</th>
+                    <th class="border-0">Device</th>
+                    <th class="border-0 d-none d-xl-table-cell">Browser</th>
+                    <th class="border-0 d-none d-sm-table-cell">Last Visit</th>
+                    <th class="border-0">Visits</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for visitor in recent_visitors %}
+                <tr>
+                    <td class="align-middle">
+                        <code class="small">{{ visitor.ip_address }}</code>
+                    </td>
+                    <td class="align-middle d-none d-md-table-cell">
+                        {% if visitor.user %}
+                            <div>
+                                <div class="fw-bold">{{ visitor.user.username }}</div>
+                                <small class="visitor-info">{{ visitor.user.user_type|title }}</small>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">Anonymous</span>
+                        {% endif %}
+                    </td>
+                    <td class="align-middle d-none d-lg-table-cell">
+                        {% if visitor.city and visitor.country %}
+                            <small>{{ visitor.city }}, {{ visitor.country }}</small>
+                        {% else %}
+                            <span class="text-muted">Unknown</span>
+                        {% endif %}
+                    </td>
+                    <td class="align-middle">
+                        <i class="fas fa-{% if visitor.device_type == 'mobile' %}mobile-alt{% elif visitor.device_type == 'tablet' %}tablet-alt{% else %}desktop{% endif %} me-1 text-muted"></i>
+                        <span class="d-none d-sm-inline">{{ visitor.device_type|title }}</span>
+                    </td>
+                    <td class="align-middle d-none d-xl-table-cell">
+                        <small class="visitor-info">{{ visitor.browser|default:"Unknown" }}</small>
+                    </td>
+                    <td class="align-middle d-none d-sm-table-cell">
+                        <small>{{ visitor.last_visit|date:"M d, H:i" }}</small>
+                    </td>
+                    <td class="align-middle">
+                        <span class="badge bg-{% if visitor.visit_count == 1 %}success{% elif visitor.visit_count < 5 %}warning{% else %}info{% endif %}">
+                            {{ visitor.visit_count }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="fas fa-user-friends fa-2x mb-2 d-block"></i>
+                        No visitors yet
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if recent_visitors.has_other_pages %}
+    <div class="d-flex justify-content-center mt-3">
+        <nav>
+            <ul class="pagination">
+                {% if recent_visitors.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?visitors_page=1">First</a></li>
+                    <li class="page-item"><a class="page-link" href="?visitors_page={{ recent_visitors.previous_page_number }}">Previous</a></li>
+                {% endif %}
+                
+                {% for num in recent_visitors.paginator.page_range %}
+                    {% if num == recent_visitors.number %}
+                        <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > recent_visitors.number|add:'-3' and num < recent_visitors.number|add:'3' %}
+                        <li class="page-item"><a class="page-link" href="?visitors_page={{ num }}">{{ num }}</a></li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if recent_visitors.has_next %}
+                    <li class="page-item"><a class="page-link" href="?visitors_page={{ recent_visitors.next_page_number }}">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="?visitors_page={{ recent_visitors.paginator.num_pages }}">Last</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+    
+<!-- Top Pages -->
+<div class="table-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-file-alt me-2"></i>Most Visited Pages</h5>
+        <small class="text-muted">Page {{ top_pages.number }} of {{ top_pages.paginator.num_pages }}</small>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="border-0">Page URL</th>
+                    <th class="border-0 d-none d-md-table-cell">Title</th>
+                    <th class="border-0 text-end">Views</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for page in top_pages %}
+                <tr>
+                    <td class="align-middle">
+                        <code class="small">{{ page.page_url|truncatechars:50 }}</code>
+                    </td>
+                    <td class="align-middle d-none d-md-table-cell">
+                        <small class="text-muted">{{ page.page_title|default:"No title"|truncatechars:30 }}</small>
+                    </td>
+                    <td class="align-middle text-end">
+                        <span class="fw-bold">{{ page.count }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-4">
+                        <i class="fas fa-eye fa-2x mb-2 d-block"></i>
+                        No page views yet
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if top_pages.has_other_pages %}
+    <div class="d-flex justify-content-center mt-3">
+        <nav>
+            <ul class="pagination">
+                {% if top_pages.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?pages_page={{ top_pages.previous_page_number }}">Previous</a></li>
+                {% endif %}
+                <li class="page-item active"><span class="page-link">{{ top_pages.number }}</span></li>
+                {% if top_pages.has_next %}
+                    <li class="page-item"><a class="page-link" href="?pages_page={{ top_pages.next_page_number }}">Next</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

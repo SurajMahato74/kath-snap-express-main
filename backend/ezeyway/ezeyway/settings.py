@@ -8,6 +8,7 @@ SECRET_KEY = 'django-insecure-g)8be^pfjk9cd+h!u)9$8(emxu7jj03mn$q7@7=^0t=(t=w81&
 DEBUG = True  # Set to False in production
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'ezeyway.com', 'www.ezeyway.com','4046dc4ff1d1.ngrok-free.app','YOUR_NEW_NGROK_URL.ngrok-free.app',]  # Replace YOUR_NEW_NGROK_URL with actual ngrok URL
 
+
 # Installed apps
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -21,6 +22,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'channels',
+    'analytics',
 ]
 ASGI_APPLICATION = 'ezeyway.asgi.application'
 CHANNEL_LAYERS = {
@@ -33,6 +35,7 @@ CHANNEL_LAYERS = {
 }
 # Middleware
 MIDDLEWARE = [
+    'ezeyway.middleware.DisableCSRFMiddleware',  # Force disable CSRF for /api/ endpoints
     'corsheaders.middleware.CorsMiddleware',
     'ezeyway.middleware.CapacitorMiddleware',
     'ezeyway.middleware.NgrokCorsMiddleware',
@@ -43,6 +46,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'analytics.middleware.AnalyticsMiddleware',  # Track all visitors
 ]
 
 ROOT_URLCONF = 'ezeyway.urls'
@@ -62,29 +66,25 @@ DATABASES = {
 WSGI_APPLICATION = 'ezeyway.wsgi.application'
 
 # Static files (CSS, JS)
-STATIC_URL = '/assets/'
-STATICFILES_DIRS = [
-    BASE_DIR / "dist" / "assets",
-]
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files (User uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Use ngrok URL for media files when running through ngrok
-if '150e57c57d60.ngrok-free.app' in str(ALLOWED_HOSTS):
+# Use HTTPS URLs for production domains
+if 'ezeyway.com' in str(ALLOWED_HOSTS):
+    MEDIA_URL = 'https://ezeyway.com/media/'
+    STATIC_URL = 'https://ezeyway.com/static/'
+elif '150e57c57d60.ngrok-free.app' in str(ALLOWED_HOSTS):
     MEDIA_URL = 'https://4046dc4ff1d1.ngrok-free.app/media/'
 
-# React build files
-REACT_URL = '/'
-REACT_ROOT = BASE_DIR / "dist"
-
-# Templates (React index.html)
+# Templates
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / "dist"],  # React index.html
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -114,12 +114,15 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'm.suraj1123@gmail.com'  # Replace with your email
 EMAIL_HOST_PASSWORD = 'eimg hdsw rjvr nzba'  # Replace with your app password
-DEFAULT_FROM_EMAIL = 'EzeyWay <m.suraj1123@gmail.com>'
+DEFAULT_FROM_EMAIL = 'ezeyway <m.suraj1123@gmail.com>'
 
 # OTP Settings
 OTP_EXPIRY_MINUTES = 10
 VERIFICATION_TOKEN_EXPIRY_HOURS = 24
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 2
+
+# Google OAuth Settings
+GOOGLE_OAUTH_CLIENT_ID = '413898594267-m6kiake3vs83slgvp3e3uk6kcchlssf5.apps.googleusercontent.com'
 
 # Django REST Framework
 REST_FRAMEWORK = {
@@ -178,18 +181,13 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # CSRF Settings
 CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:8080',
-    'http://127.0.0.1:8080',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://150e57c57d60.ngrok-free.app',
     'https://4046dc4ff1d1.ngrok-free.app',
+    'https://ezeyway.com',
+    'https://www.ezeyway.com',
     'capacitor://localhost',
     'ionic://localhost',
     'http://localhost',
     'https://localhost',
-    'https://localhost:8080',
-    'https://localhost:3000',
 ]
 
 # Additional settings for mobile app
@@ -199,3 +197,48 @@ ALLOWED_HOSTS.extend([
     '127.0.0.1',
     'localhost'
 ])
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple'
+        },
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'django_debug.log',
+            'formatter': 'verbose'
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'accounts': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}

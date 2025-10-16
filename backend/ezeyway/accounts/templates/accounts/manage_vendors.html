@@ -287,7 +287,7 @@
             console.log('Fetching vendor details for ID:', vendorId);
             console.log('Using token:', token ? token.substring(0, 10) + '...' : 'No token');
             
-            fetch(`/vendor-profiles/${vendorId}/`, {
+            fetch(`/api/vendor-profiles/${vendorId}/`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Token ${token}`,
@@ -476,7 +476,7 @@
             
             const token = '{{ auth_token }}';
 
-            fetch(`/accounts/admin/vendors/${currentVendorId}/approve/`, {
+            fetch(`/api/admin/vendors/${currentVendorId}/approve/`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Token ${token}`,
@@ -510,7 +510,7 @@
             
             const token = '{{ auth_token }}';
 
-            fetch(`/accounts/admin/vendors/${currentVendorId}/reject/`, {
+            fetch(`/api/admin/vendors/${currentVendorId}/reject/`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Token ${token}`,

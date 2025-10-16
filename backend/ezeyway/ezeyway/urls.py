@@ -12,7 +12,7 @@ import os
 def api_root(request):
     return JsonResponse({
         "message": "Welcome to Ezeyway Django API",
-        "endpoints": ["/api/accounts/", "/api/vendor-profiles/"]
+        "endpoints": ["/api/accounts/", "/api/vendor-profiles/", "/api/analytics/"]
     })
 
 def react_frontend_view(request):
@@ -29,8 +29,11 @@ def react_frontend_view(request):
 urlpatterns = [
     # Django API (prefix = /api/)
     path('api/', api_root, name='api_root'),
+    path('api/', include('accounts.api_urls')),  # Include API endpoints BEFORE admin
+    path('api/analytics/', include('analytics.api_urls')),  # Analytics API
     path('api/admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
+    path('analytics/', include('analytics.urls')),
     # path('api/superadmin/', include('superadmin.urls')),  # optional
     # path('vendor-profiles/', include('vendor_profiles.urls')),  # Module not found
 
