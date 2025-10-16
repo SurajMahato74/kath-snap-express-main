@@ -601,20 +601,9 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
     
     def get_icon_url(self, obj):
-        request = self.context.get('request')
         if obj.icon:
-            if request:
-                # Get the icon path and build proper URL
-                icon_path = obj.icon.url
-                if icon_path.startswith('http'):
-                    # Already a full URL, return as is
-                    return icon_path
-                else:
-                    # Build URL with correct domain (without /api/)
-                    host = request.get_host()
-                    scheme = request.scheme
-                    return f"{scheme}://{host}{icon_path}"
-            return obj.icon.url
+            # Always return the direct media URL without /api/ prefix
+            return f"https://ezeyway.com{obj.icon.url}"
         return None
 
 # Import message serializers
