@@ -604,11 +604,16 @@ class CategorySerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if obj.icon:
             if request:
-                # Build URL without /api/ prefix to avoid double /api/ in media URLs
-                base_url = request.build_absolute_uri('/').rstrip('/')
-                if '/api' in base_url:
-                    base_url = base_url.replace('/api', '')
-                return f"{base_url}{obj.icon.url}"
+                # Get the icon path and build proper URL
+                icon_path = obj.icon.url
+                if icon_path.startswith('http'):
+                    # Already a full URL, return as is
+                    return icon_path
+                else:
+                    # Build URL with correct domain (without /api/)
+                    host = request.get_host()
+                    scheme = request.scheme
+                    return f"{scheme}://{host}{icon_path}"
             return obj.icon.url
         return None
 
