@@ -27,13 +27,10 @@ def react_frontend_view(request):
 # URL patterns
 # ---------------------------
 urlpatterns = [
-    # Media files served at /api/media/ (redirect to /media/)
-    re_path(r'^api/media/(?P<path>.*)$', lambda request, path: HttpResponse(status=301, headers={'Location': f'/media/{path}'})),
-    
     # Django API (prefix = /api/) - MUST come first
     path('api/', api_root, name='api_root'),
-    path('api/', include('accounts.api_urls')),  # Include API endpoints BEFORE admin
-    path('api/analytics/', include('analytics.api_urls')),  # Analytics API
+    path('api/', include('accounts.api_urls')),
+    path('api/analytics/', include('analytics.api_urls')),
     path('api/admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     path('analytics/', include('analytics.urls')),
