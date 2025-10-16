@@ -602,7 +602,6 @@ class CategorySerializer(serializers.ModelSerializer):
     
     def get_icon_url(self, obj):
         if obj.icon:
-            # Return the icon URL as-is since it's already a full URL
             return obj.icon.url
         return None
 
