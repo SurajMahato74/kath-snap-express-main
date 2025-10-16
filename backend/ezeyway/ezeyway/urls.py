@@ -27,21 +27,19 @@ def react_frontend_view(request):
 # URL patterns
 # ---------------------------
 urlpatterns = [
-    # Django API (prefix = /api/)
+    # Django API (prefix = /api/) - MUST come first
     path('api/', api_root, name='api_root'),
     path('api/', include('accounts.api_urls')),  # Include API endpoints BEFORE admin
     path('api/analytics/', include('analytics.api_urls')),  # Analytics API
     path('api/admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     path('analytics/', include('analytics.urls')),
-    # path('api/superadmin/', include('superadmin.urls')),  # optional
-    # path('vendor-profiles/', include('vendor_profiles.urls')),  # Module not found
-
+    
     # React SPA root
     re_path(r'^$', react_frontend_view, name='react_frontend'),
 
-    # React SPA catch-all (exclude /api, /media, /static)
-    re_path(r'^(?!api/|media/|static/).*$', react_frontend_view, name='react_spa'),
+    # React SPA catch-all (exclude /api/, /media/, /static/, /analytics/)
+    re_path(r'^(?!api/|media/|static/|analytics/).*$', react_frontend_view, name='react_spa'),
 ]
 
 # ---------------------------
