@@ -64,11 +64,12 @@ urlpatterns = [
     path('products/<int:product_id>/images/<int:image_id>/set-primary/', api_views.set_primary_image, name='api_set_primary_image'),
     
     # Wallet APIs
-    path('accounts/wallet/', api_views.vendor_wallet_api, name='api_vendor_wallet'),
-    path('accounts/wallet/transactions/', api_views.wallet_transactions_api, name='api_wallet_transactions'),
-    path('accounts/wallet/add-money/', api_views.add_money_api, name='api_add_money'),
-    path('accounts/wallet/khalti-payment/', api_views.initiate_khalti_payment, name='api_khalti_payment'),
-    path('accounts/wallet/khalti-verify/', api_views.verify_khalti_payment, name='api_khalti_verify'),
+    path('vendor-wallet/', api_views.vendor_wallet_api, name='api_vendor_wallet'),
+    path('wallet/transactions/', api_views.wallet_transactions_api, name='api_wallet_transactions'),
+    path('wallet/add-money/', api_views.add_money_api, name='api_add_money'),
+    path('wallet/khalti-payment/', api_views.initiate_khalti_payment, name='api_khalti_payment'),
+    path('wallet/khalti-verify/', api_views.verify_khalti_payment, name='api_khalti_verify'),
+    path('wallet/check-balance/', api_views.check_wallet_balance_api, name='api_check_wallet_balance'),
     
     # Customer Search APIs
     path('search/products/', api_views.CustomerProductSearchView.as_view(), name='api_customer_product_search'),

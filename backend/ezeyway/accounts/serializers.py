@@ -452,6 +452,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'name', 'category', 'subcategory', 'price', 'cost_price',
             'sku', 'barcode', 'quantity', 'low_stock_threshold',
             'description', 'short_description', 'tags', 'status', 'featured', 'free_delivery',
+            'custom_delivery_fee_enabled', 'custom_delivery_fee',
             'seo_title', 'seo_description', 'dynamic_fields', 'images', 'image_files',
             'total_sold', 'created_at', 'updated_at'
         ]
@@ -465,6 +466,16 @@ class ProductSerializer(serializers.ModelSerializer):
             featured_value = validated_data['featured']
             if isinstance(featured_value, str):
                 validated_data['featured'] = featured_value.lower() in ('true', '1', 'yes')
+        
+        if 'free_delivery' in validated_data:
+            free_delivery_value = validated_data['free_delivery']
+            if isinstance(free_delivery_value, str):
+                validated_data['free_delivery'] = free_delivery_value.lower() in ('true', '1', 'yes')
+        
+        if 'custom_delivery_fee_enabled' in validated_data:
+            custom_delivery_fee_enabled_value = validated_data['custom_delivery_fee_enabled']
+            if isinstance(custom_delivery_fee_enabled_value, str):
+                validated_data['custom_delivery_fee_enabled'] = custom_delivery_fee_enabled_value.lower() in ('true', '1', 'yes')
         
         product = Product.objects.create(**validated_data)
         
@@ -485,6 +496,16 @@ class ProductSerializer(serializers.ModelSerializer):
             featured_value = validated_data['featured']
             if isinstance(featured_value, str):
                 validated_data['featured'] = featured_value.lower() in ('true', '1', 'yes')
+        
+        if 'free_delivery' in validated_data:
+            free_delivery_value = validated_data['free_delivery']
+            if isinstance(free_delivery_value, str):
+                validated_data['free_delivery'] = free_delivery_value.lower() in ('true', '1', 'yes')
+        
+        if 'custom_delivery_fee_enabled' in validated_data:
+            custom_delivery_fee_enabled_value = validated_data['custom_delivery_fee_enabled']
+            if isinstance(custom_delivery_fee_enabled_value, str):
+                validated_data['custom_delivery_fee_enabled'] = custom_delivery_fee_enabled_value.lower() in ('true', '1', 'yes')
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -544,7 +565,8 @@ class CustomerProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'category', 'subcategory', 'price', 'quantity',
-            'description', 'short_description', 'tags', 'featured', 'images',
+            'description', 'short_description', 'tags', 'featured', 'free_delivery',
+            'custom_delivery_fee_enabled', 'custom_delivery_fee', 'images',
             'vendor_name', 'vendor_id', 'vendor_latitude', 'vendor_longitude', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']

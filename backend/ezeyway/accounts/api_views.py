@@ -743,6 +743,24 @@ def vendor_toggle_status_api(request, pk):
         if not isinstance(is_active, bool):
             return Response({'error': 'is_active must be a boolean'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Check wallet balance if trying to go online
+        if is_active:
+            wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
+            if wallet.balance < 100:
+                # Force offline and disable toggle
+                vendor_profile.is_active = False
+                vendor_profile.status_override = True
+                vendor_profile.status_override_date = timezone.now().date()
+                vendor_profile.save()
+                
+                return Response({
+                    'error': 'Insufficient wallet balance. Minimum 100 points required to go online.',
+                    'wallet_balance': float(wallet.balance),
+                    'required_balance': 100,
+                    'is_active': False,
+                    'can_toggle': False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
         # Update status
         vendor_profile.is_active = is_active
         vendor_profile.status_override = True
@@ -2462,5 +2480,42 @@ def check_password_setup_api(request):
             'has_google_account': bool(user.google_id),
             'email': user.email
         })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def check_wallet_balance_api(request):
+    """Check wallet balance and auto-disable if needed"""
+    try:
+        if not request.user.is_superuser:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            wallet, created = VendorWallet.objects.get_or_create(vendor=vendor_profile)
+            
+            can_be_active = wallet.balance >= 100
+            
+            # Auto-disable if balance is low and currently active
+            if not can_be_active and vendor_profile.is_active:
+                vendor_profile.is_active = False
+                vendor_profile.status_override = True
+                vendor_profile.status_override_date = timezone.now().date()
+                vendor_profile.save()
+            
+            return Response({
+                'wallet_balance': float(wallet.balance),
+                'can_be_active': can_be_active,
+                'is_active': vendor_profile.is_active,
+                'required_balance': 100
+            })
+        else:
+            # Admin endpoint to check all vendors
+            from .wallet_monitor import check_and_disable_low_balance_vendors
+            disabled_count = check_and_disable_low_balance_vendors()
+            return Response({
+                'message': f'Checked all vendors, disabled {disabled_count} due to low balance'
+            })
+            
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

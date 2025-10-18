@@ -277,6 +277,8 @@ class Product(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     featured = models.BooleanField(default=False)
     free_delivery = models.BooleanField(default=False)
+    custom_delivery_fee_enabled = models.BooleanField(default=False)
+    custom_delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     seo_title = models.CharField(max_length=200, blank=True, null=True)
     seo_description = models.TextField(blank=True, null=True)
     dynamic_fields = models.JSONField(default=dict)
@@ -354,6 +356,15 @@ class VendorWallet(models.Model):
                 order_amount=order_amount,
                 status='completed'
             )
+            
+            # Auto-disable vendor if balance drops below 100
+            if self.balance < 100 and self.vendor.is_active:
+                from django.utils import timezone
+                self.vendor.is_active = False
+                self.vendor.status_override = True
+                self.vendor.status_override_date = timezone.now().date()
+                self.vendor.save()
+            
             return True
         return False
 
