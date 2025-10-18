@@ -78,11 +78,11 @@ class CustomUser(AbstractUser):
         return self.user_type == 'superuser'
     
     @property
-    def is_vendor(self):
+    def is_vendor_type(self):
         return self.user_type == 'vendor'
     
     @property
-    def is_customer(self):
+    def is_customer_type(self):
         return self.user_type == 'customer'
 
 class VendorProfile(models.Model):
