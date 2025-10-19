@@ -98,6 +98,12 @@
                                     <i class="fas fa-plus me-2"></i>Add Subcategory
                                 </button>
                             </li>
+                            <li>
+                                <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#manageParametersModal" 
+                                        onclick="manageParameters({{ category.id }}, '{{ category.name }}', 'category')">
+                                    <i class="fas fa-cogs me-2"></i>Manage Parameters
+                                </button>
+                            </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="post" style="display: inline;">
@@ -139,6 +145,21 @@
                         <p class="text-muted small mb-3">{{ category.description|truncatechars:100 }}</p>
                     {% endif %}
                     
+                    <!-- Category Parameters -->
+                    {% if category.parameters.all %}
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2">Parameters ({{ category.parameters.count }}):</h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for param in category.parameters.all|slice:":5" %}
+                                    <span class="badge bg-info text-dark">{{ param.label }}</span>
+                                {% endfor %}
+                                {% if category.parameters.count > 5 %}
+                                    <span class="badge bg-secondary">+{{ category.parameters.count|add:"-5" }} more</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
+                    
                     <!-- Subcategories -->
                     {% if category.subcategories.all %}
                         <div class="subcategories">
@@ -172,6 +193,12 @@
                                                         <i class="fas fa-edit me-2"></i>Edit
                                                     </button>
                                                 </li>
+                                                <li>
+                                                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#manageParametersModal" 
+                                                            onclick="manageParameters({{ subcategory.id }}, '{{ subcategory.name }}', 'subcategory')">
+                                                        <i class="fas fa-cogs me-2"></i>Manage Parameters
+                                                    </button>
+                                                </li>
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li>
                                                     <form method="post" style="display: inline;">
@@ -202,6 +229,17 @@
                                     </div>
                                     {% if subcategory.description %}
                                         <small class="text-muted d-block mt-1">{{ subcategory.description|truncatechars:80 }}</small>
+                                    {% endif %}
+                                    {% if subcategory.parameters.all %}
+                                        <div class="mt-1">
+                                            <small class="text-muted">Parameters: </small>
+                                            {% for param in subcategory.parameters.all|slice:":3" %}
+                                                <span class="badge bg-light text-dark" style="font-size: 0.6rem;">{{ param.label }}</span>
+                                            {% endfor %}
+                                            {% if subcategory.parameters.count > 3 %}
+                                                <span class="badge bg-secondary" style="font-size: 0.6rem;">+{{ subcategory.parameters.count|add:"-3" }}</span>
+                                            {% endif %}
+                                        </div>
                                     {% endif %}
                                 </div>
                             {% endfor %}
@@ -426,6 +464,139 @@
     </div>
 </div>
 
+<!-- Manage Parameters Modal -->
+<div class="modal fade" id="manageParametersModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-cogs me-2"></i>Manage Parameters</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Managing parameters for: <strong id="param_target_name"></strong>
+                </div>
+                
+                <!-- Add Parameter Form -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-plus me-2"></i>Add New Parameter</h6>
+                    </div>
+                    <div class="card-body">
+                        <form id="addParameterForm">
+                            <input type="hidden" id="param_target_id" name="target_id">
+                            <input type="hidden" id="param_target_type" name="target_type">
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Parameter Name *</label>
+                                        <input type="text" class="form-control" name="param_name" placeholder="e.g., brand, size" required>
+                                        <div class="form-text">Internal name (lowercase, no spaces)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Display Label *</label>
+                                        <input type="text" class="form-control" name="param_label" placeholder="e.g., Brand Name, Size" required>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Field Type *</label>
+                                        <select class="form-select" name="param_type" onchange="toggleOptions(this)" required>
+                                            <option value="">Select field type</option>
+                                            <option value="text">Text</option>
+                                            <option value="number">Number</option>
+                                            <option value="select">Select (Single Choice)</option>
+                                            <option value="multiselect">Multi-Select</option>
+                                            <option value="textarea">Textarea</option>
+                                            <option value="boolean">Boolean (Yes/No)</option>
+                                            <option value="date">Date</option>
+                                            <option value="color">Color</option>
+                                            <option value="range">Range</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Display Order</label>
+                                        <input type="number" class="form-control" name="param_order" value="0" min="0">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Placeholder Text</label>
+                                <input type="text" class="form-control" name="param_placeholder" placeholder="e.g., Enter brand name">
+                            </div>
+                            
+                            <div class="mb-3" id="optionsSection" style="display: none;">
+                                <label class="form-label">Options (for Select/Multi-Select)</label>
+                                <textarea class="form-control" name="param_options" rows="3" placeholder="Enter options, one per line:\nOption 1\nOption 2\nOption 3"></textarea>
+                                <div class="form-text">Enter each option on a new line</div>
+                            </div>
+                            
+                            <div class="row" id="numberSection" style="display: none;">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">Min Value</label>
+                                        <input type="number" class="form-control" name="param_min" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">Max Value</label>
+                                        <input type="number" class="form-control" name="param_max" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">Step</label>
+                                        <input type="number" class="form-control" name="param_step" step="0.01" value="1">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" name="param_required" id="paramRequired">
+                                <label class="form-check-label" for="paramRequired">
+                                    Required Parameter
+                                </label>
+                            </div>
+                            
+                            <button type="button" class="btn btn-primary" onclick="addParameter()">
+                                <i class="fas fa-plus me-1"></i>Add Parameter
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Existing Parameters -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-list me-2"></i>Existing Parameters</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="parametersList">
+                            <div class="text-center text-muted py-3">
+                                <i class="fas fa-spinner fa-spin"></i> Loading parameters...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function setParentCategory(categoryId, categoryName) {
     document.getElementById('parent_category_id').value = categoryId;
@@ -444,6 +615,150 @@ function editSubcategory(subcategoryId, name, description, displayOrder) {
     document.getElementById('edit_subcategory_name').value = name;
     document.getElementById('edit_subcategory_description').value = description;
     document.getElementById('edit_subcategory_display_order').value = displayOrder;
+}
+
+function manageParameters(targetId, targetName, targetType) {
+    document.getElementById('param_target_id').value = targetId;
+    document.getElementById('param_target_type').value = targetType;
+    document.getElementById('param_target_name').textContent = targetName;
+    
+    // Load existing parameters
+    loadParameters(targetId, targetType);
+}
+
+function toggleOptions(selectElement) {
+    const optionsSection = document.getElementById('optionsSection');
+    const numberSection = document.getElementById('numberSection');
+    const value = selectElement.value;
+    
+    if (value === 'select' || value === 'multiselect') {
+        optionsSection.style.display = 'block';
+        numberSection.style.display = 'none';
+    } else if (value === 'number' || value === 'range') {
+        optionsSection.style.display = 'none';
+        numberSection.style.display = 'block';
+    } else {
+        optionsSection.style.display = 'none';
+        numberSection.style.display = 'none';
+    }
+}
+
+function loadParameters(targetId, targetType) {
+    const parametersList = document.getElementById('parametersList');
+    parametersList.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin"></i> Loading parameters...</div>';
+    
+    fetch(`/api/accounts/superadmin/categories/get-parameters/?target_id=${targetId}&target_type=${targetType}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.parameters && data.parameters.length > 0) {
+                let html = '';
+                data.parameters.forEach(param => {
+                    html += `
+                        <div class="border rounded p-3 mb-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">${param.label} <span class="badge bg-secondary">${param.field_type}</span></h6>
+                                    <small class="text-muted">Name: ${param.name}</small>
+                                    ${param.is_required ? '<span class="badge bg-warning ms-2">Required</span>' : ''}
+                                    ${param.placeholder ? `<br><small class="text-muted">Placeholder: ${param.placeholder}</small>` : ''}
+                                    ${param.options && param.options.length > 0 ? `<br><small class="text-muted">Options: ${param.options.join(', ')}</small>` : ''}
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteParameter(${param.id}, '${targetType}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                parametersList.innerHTML = html;
+            } else {
+                parametersList.innerHTML = '<div class="text-center text-muted py-3">No parameters found. Add your first parameter above.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading parameters:', error);
+            parametersList.innerHTML = '<div class="text-center text-danger py-3">Error loading parameters. Please try again.</div>';
+        });
+}
+
+function addParameter() {
+    const form = document.getElementById('addParameterForm');
+    const formData = new FormData(form);
+    
+    // Add action parameter
+    formData.append('action', 'add_parameter');
+    
+    // Convert options textarea to array
+    const optionsText = formData.get('param_options');
+    if (optionsText) {
+        const options = optionsText.split('\n').filter(opt => opt.trim() !== '');
+        formData.delete('param_options');
+        formData.append('param_options', JSON.stringify(options));
+    }
+    
+    fetch('/api/accounts/superadmin/categories/add-parameter/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reset form
+            form.reset();
+            document.getElementById('optionsSection').style.display = 'none';
+            document.getElementById('numberSection').style.display = 'none';
+            
+            // Reload parameters
+            const targetId = document.getElementById('param_target_id').value;
+            const targetType = document.getElementById('param_target_type').value;
+            loadParameters(targetId, targetType);
+            
+            // Show success message
+            alert('Parameter added successfully!');
+        } else {
+            alert('Error adding parameter: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error adding parameter:', error);
+        alert('Error adding parameter. Please try again.');
+    });
+}
+
+function deleteParameter(parameterId, targetType) {
+    if (confirm('Are you sure you want to delete this parameter?')) {
+        fetch('/api/accounts/superadmin/categories/delete-parameter/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                parameter_id: parameterId,
+                target_type: targetType
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Reload parameters
+                const targetId = document.getElementById('param_target_id').value;
+                const targetType = document.getElementById('param_target_type').value;
+                loadParameters(targetId, targetType);
+                
+                alert('Parameter deleted successfully!');
+            } else {
+                alert('Error deleting parameter: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting parameter:', error);
+            alert('Error deleting parameter. Please try again.');
+        });
+    }
 }
 </script>
 {% endblock %}

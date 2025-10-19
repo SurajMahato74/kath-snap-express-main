@@ -23,23 +23,33 @@ def react_frontend_view(request):
     except FileNotFoundError:
         return HttpResponse("React app not found", status=404)
 
+def superadmin_login_redirect(request):
+    """Redirect API login attempts to proper superadmin login"""
+    from django.shortcuts import redirect
+    return redirect('/accounts/login/')
+
 # ---------------------------
 # URL patterns
 # ---------------------------
 urlpatterns = [
-    # Django API (prefix = /api/) - MUST come first
+    # Django Admin and Superadmin (MUST come first)
+    path('admin/', admin.site.urls),
+    path('accounts/', include('accounts.urls')),  # Superadmin login and dashboard
+    path('analytics/', include('analytics.urls')),
+    
+    # Django API (prefix = /api/)
     path('api/', api_root, name='api_root'),
     path('api/', include('accounts.api_urls')),
     path('api/analytics/', include('analytics.api_urls')),
-    path('api/admin/', admin.site.urls),
-    path('api/accounts/', include('accounts.urls')),
-    path('analytics/', include('analytics.urls')),
+    
+    # Redirect for common mistake - trying to access superadmin via API
+    path('api/accounts/login/', superadmin_login_redirect, name='api_login_redirect'),
     
     # React SPA root
     re_path(r'^$', react_frontend_view, name='react_frontend'),
 
-    # React SPA catch-all (exclude /api/, /media/, /static/, /analytics/)
-    re_path(r'^(?!api/|media/|static/|analytics/).*$', react_frontend_view, name='react_spa'),
+    # React SPA catch-all (exclude /admin/, /accounts/, /api/, /media/, /static/, /analytics/)
+    re_path(r'^(?!admin/|accounts/|api/|media/|static/|analytics/).*$', react_frontend_view, name='react_spa'),
 ]
 
 # ---------------------------

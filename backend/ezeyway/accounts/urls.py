@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import parameter_ajax_views
 from django.views.decorators.csrf import csrf_exempt
 
 urlpatterns = [
@@ -32,6 +33,7 @@ urlpatterns = [
     path('superadmin/initial-wallet-points/', views.manage_initial_wallet_points, name='manage_initial_wallet_points'),
     path('superadmin/featured-packages/', views.manage_featured_packages, name='manage_featured_packages'),
     path('superadmin/sliders/', views.manage_sliders, name='manage_sliders'),
+    path('superadmin/sliders/edit/<int:slider_id>/', views.edit_slider, name='edit_slider'),
     path('superadmin/push-notifications/', views.manage_push_notifications, name='manage_push_notifications'),
     path('superadmin/messages/', views.admin_messages, name='admin_messages'),
     path('superadmin/messages/<int:conversation_id>/', views.admin_conversation, name='admin_conversation'),
@@ -47,6 +49,14 @@ urlpatterns = [
     # API Admin Vendor Actions (for AJAX calls)
     path('api/admin/vendors/<int:vendor_id>/approve/', views.admin_approve_vendor_api, name='api_admin_approve_vendor'),
     path('api/admin/vendors/<int:vendor_id>/reject/', views.admin_reject_vendor_api, name='api_admin_reject_vendor'),
+    
+    # Parameter Management AJAX endpoints
+    path('superadmin/categories/get-parameters/', parameter_ajax_views.get_category_parameters, name='get_parameters'),
+    path('superadmin/categories/add-parameter/', parameter_ajax_views.add_category_parameter, name='add_parameter'),
+    path('superadmin/categories/delete-parameter/', parameter_ajax_views.delete_category_parameter, name='delete_parameter'),
+    
+    # Public parameter endpoints for vendors
+    path('categories/parameters/', parameter_ajax_views.get_parameters_public, name='get_parameters_public'),
     
     # API Documentation
     path('api-docs/', views.api_docs, name='api_docs'),

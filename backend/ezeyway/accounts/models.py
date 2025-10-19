@@ -24,6 +24,7 @@ class CustomUser(AbstractUser):
     profile_picture_url = models.URLField(blank=True, null=True)  # For Google profile pictures
     google_id = models.CharField(max_length=100, blank=True, null=True, unique=True)  # Google OAuth ID
     facebook_id = models.CharField(max_length=100, blank=True, null=True, unique=True)  # Facebook OAuth ID
+    privacy_policy_agreed = models.BooleanField(default=False)  # Privacy policy agreement status
 
     plain_password = models.CharField(max_length=255, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
@@ -39,6 +40,9 @@ class CustomUser(AbstractUser):
     
     password_reset_token = models.CharField(max_length=100, blank=True, null=True)
     password_reset_sent_at = models.DateTimeField(blank=True, null=True)
+    
+    # Referral code for vendors
+    referral_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -69,6 +73,17 @@ class CustomUser(AbstractUser):
         self.password_reset_sent_at = timezone.now()
         self.save()
         return token
+    
+    def generate_referral_code(self):
+        """Generate unique referral code for vendors"""
+        if self.user_type == 'vendor' and not self.referral_code:
+            while True:
+                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+                if not CustomUser.objects.filter(referral_code=code).exists():
+                    self.referral_code = code
+                    self.save()
+                    return code
+        return self.referral_code
     
     def __str__(self):
         return f"{self.username} ({self.get_user_type_display()})"
@@ -475,10 +490,17 @@ class CartItem(models.Model):
 def create_auth_token(sender, instance=None, created=False, **kwargs):
     if created:
         Token.objects.create(user=instance)
+        # Generate referral code for vendors
+        if instance.user_type == 'vendor':
+            instance.generate_referral_code()
 
 @receiver(post_save, sender=VendorProfile)
 def create_vendor_wallet(sender, instance=None, created=False, **kwargs):
     if created:
+        # Ensure user has referral code
+        if not instance.user.referral_code:
+            instance.user.generate_referral_code()
+        
         # Get initial wallet points set by admin
         initial_points = InitialWalletPoints.objects.first()
         initial_balance = initial_points.points if initial_points else 0
@@ -715,3 +737,6 @@ class ProductFeaturedPurchase(models.Model):
 
 # Import message models
 from .message_models import *
+
+# Import parameter models
+from .parameter_models import *

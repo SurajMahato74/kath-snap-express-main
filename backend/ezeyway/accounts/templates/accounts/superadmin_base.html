@@ -121,6 +121,50 @@
             color: white;
             font-size: 1.25rem;
         }
+
+        /* Floating Message Icon Styles */
+        .floating-message-icon {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1050;
+        }
+
+        .floating-message-icon .btn {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .floating-message-icon .btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .floating-message-icon .badge {
+            font-size: 0.75rem;
+            min-width: 20px;
+            height: 20px;
+        }
+
+        @media (max-width: 767.98px) {
+            .floating-message-icon {
+                bottom: 25px;
+                right: 25px;
+            }
+
+            .floating-message-icon .btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.25rem;
+            }
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -138,6 +182,15 @@
                 <i class="fas fa-crown me-2"></i><span class="d-none d-sm-inline">EzeyWay Admin</span><span class="d-sm-none">Admin</span>
             </a>
             <div class="navbar-nav ms-auto">
+                <!-- Message Icon in Navbar -->
+                <div class="nav-item me-3">
+                    <a class="nav-link position-relative" href="{% url 'admin_messages' %}" title="Messages">
+                        <i class="fas fa-envelope fa-lg"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="navbarMessageBadge" style="display: none;">
+                            <span class="visually-hidden">unread messages</span>
+                        </span>
+                    </a>
+                </div>
                 <div class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         <i class="fas fa-user-circle me-1"></i><span class="d-none d-sm-inline">{{ user.username }}</span>
@@ -243,6 +296,16 @@
         </div>
     </div>
 
+    <!-- Floating Message Icon -->
+    <div class="floating-message-icon" id="floatingMessageIcon">
+        <a href="{% url 'admin_messages' %}" class="btn btn-primary rounded-circle shadow-lg" title="Messages">
+            <i class="fas fa-envelope"></i>
+            <span class="badge bg-danger position-absolute top-0 start-100 translate-middle rounded-pill" id="floatingMessageBadge" style="display: none;">
+                <span class="visually-hidden">unread messages</span>
+            </span>
+        </a>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Mobile sidebar toggle functionality
@@ -283,6 +346,52 @@
                     }
                 });
             });
+        });
+
+        // Message notification functionality
+        function updateMessageBadge() {
+            fetch('{% url "admin_messages" %}?type=all', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update navbar badge
+                const navbarBadge = document.getElementById('navbarMessageBadge');
+                if (navbarBadge) {
+                    if (data.unread_count && data.unread_count > 0) {
+                        navbarBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                        navbarBadge.style.display = 'block';
+                    } else {
+                        navbarBadge.style.display = 'none';
+                    }
+                }
+
+                // Update floating badge
+                const floatingBadge = document.getElementById('floatingMessageBadge');
+                if (floatingBadge) {
+                    if (data.unread_count && data.unread_count > 0) {
+                        floatingBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                        floatingBadge.style.display = 'block';
+                    } else {
+                        floatingBadge.style.display = 'none';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching message count:', error);
+            });
+        }
+
+        // Update message badge every 30 seconds
+        setInterval(updateMessageBadge, 30000);
+
+        // Update immediately on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateMessageBadge();
         });
     </script>
     {% block extra_js %}{% endblock %}

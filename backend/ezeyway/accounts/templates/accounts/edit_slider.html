@@ -1,0 +1,303 @@
+{% extends 'accounts/superadmin_base.html' %}
+
+{% block title %}Edit Slider{% endblock %}
+
+{% block extra_css %}
+<style>
+    .slider-preview {
+        max-width: 300px;
+        max-height: 180px;
+        object-fit: cover;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .drag-drop-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 40px;
+        text-align: center;
+        background-color: #f8f9fa;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .drag-drop-area:hover {
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+    
+    .drag-drop-area.dragover {
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+        transform: scale(1.02);
+    }
+    
+    .file-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 10px;
+    }
+    
+    .current-image {
+        border: 3px solid #28a745;
+        border-radius: 8px;
+        padding: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-edit me-2"></i>Edit Slider</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{% url 'manage_sliders' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Sliders
+        </a>
+    </div>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Edit Slider Details</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="title" class="form-label">Slider Title *</label>
+                            <input type="text" class="form-control" id="title" name="title" value="{{ slider.title }}" required placeholder="Enter slider title">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="display_order" class="form-label">Display Order</label>
+                            <input type="number" class="form-control" id="display_order" name="display_order" value="{{ slider.display_order }}" min="0" placeholder="0">
+                            <small class="text-muted">0 = first, higher numbers = later</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="2" placeholder="Optional slider description">{{ slider.description }}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="visibility" class="form-label">Visibility *</label>
+                            <select class="form-select" id="visibility" name="visibility" required>
+                                <option value="both" {% if slider.visibility == 'both' %}selected{% endif %}>Both Customer & Vendor</option>
+                                <option value="customer" {% if slider.visibility == 'customer' %}selected{% endif %}>Customer Side Only</option>
+                                <option value="vendor" {% if slider.visibility == 'vendor' %}selected{% endif %}>Vendor Side Only</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="link_url" class="form-label">Link URL</label>
+                            <input type="url" class="form-control" id="link_url" name="link_url" value="{{ slider.link_url|default:'' }}" placeholder="https://example.com">
+                            <small class="text-muted">Optional link when slider is clicked</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="datetime-local" class="form-control" id="start_date" name="start_date" 
+                                   value="{% if slider.start_date %}{{ slider.start_date|date:'Y-m-d\TH:i' }}{% endif %}">
+                            <small class="text-muted">Optional start date</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="datetime-local" class="form-control" id="end_date" name="end_date" 
+                                   value="{% if slider.end_date %}{{ slider.end_date|date:'Y-m-d\TH:i' }}{% endif %}">
+                            <small class="text-muted">Optional end date</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="image" class="form-label">Slider Image</label>
+                        <div class="drag-drop-area" id="dragDropArea">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h6>Drag & Drop new image here</h6>
+                            <p class="text-muted mb-3">or click to browse (leave empty to keep current image)</p>
+                            <input type="file" class="form-control" id="image" name="image" accept=".gif,.png,.svg,.jpg,.jpeg" style="display: none;">
+                            <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('image').click()">
+                                <i class="fas fa-folder-open me-2"></i>Choose New Image
+                            </button>
+                            <div class="file-info mt-3">
+                                <strong>Supported formats:</strong> GIF, PNG, SVG, JPEG<br>
+                                <strong>Recommended size:</strong> 1920x600px for best quality
+                            </div>
+                        </div>
+                        <div id="imagePreview" class="mt-3" style="display: none;">
+                            <img id="previewImg" class="img-fluid rounded" style="max-height: 200px;">
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearImage()">
+                                    <i class="fas fa-times me-1"></i>Remove New Image
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'manage_sliders' %}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Update Slider
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-image me-2"></i>Current Image</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if slider.image %}
+                    <img src="{{ slider.image.url }}" class="img-fluid slider-preview current-image" alt="{{ slider.title }}">
+                    <div class="mt-3">
+                        <small class="text-muted">Current slider image</small>
+                    </div>
+                {% else %}
+                    <div class="text-muted">
+                        <i class="fas fa-image fa-4x mb-3"></i>
+                        <p>No image uploaded</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Slider Info</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Status:</strong>
+                    </div>
+                    <div class="col-6">
+                        <span class="badge bg-{% if slider.is_active %}success{% else %}danger{% endif %}">
+                            {% if slider.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Visibility:</strong>
+                    </div>
+                    <div class="col-6">
+                        <span class="badge bg-{% if slider.visibility == 'customer' %}primary{% elif slider.visibility == 'vendor' %}warning{% else %}success{% endif %}">
+                            {{ slider.get_visibility_display }}
+                        </span>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Created:</strong>
+                    </div>
+                    <div class="col-6">
+                        <small>{{ slider.created_at|date:"M d, Y H:i" }}</small>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Updated:</strong>
+                    </div>
+                    <div class="col-6">
+                        <small>{{ slider.updated_at|date:"M d, Y H:i" }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dragDropArea = document.getElementById('dragDropArea');
+    const fileInput = document.getElementById('image');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    
+    // Drag and drop functionality
+    dragDropArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dragDropArea.classList.add('dragover');
+    });
+    
+    dragDropArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dragDropArea.classList.remove('dragover');
+    });
+    
+    dragDropArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragDropArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            handleFileSelect(files[0]);
+        }
+    });
+    
+    // File input change
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
+    
+    function handleFileSelect(file) {
+        // Validate file type
+        const allowedTypes = ['image/gif', 'image/png', 'image/svg+xml', 'image/jpeg', 'image/jpg'];
+        if (!allowedTypes.includes(file.type)) {
+            alert('Please select a valid image file (GIF, PNG, SVG, JPEG)');
+            return;
+        }
+        
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('File size must be less than 10MB');
+            return;
+        }
+        
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            imagePreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    window.clearImage = function() {
+        fileInput.value = '';
+        imagePreview.style.display = 'none';
+        previewImg.src = '';
+    };
+});
+</script>
+{% endblock %}

@@ -13,8 +13,24 @@ urlpatterns = [
     path('vendor/orders/', order_views.VendorOrderListView.as_view(), name='vendor_orders'),
     path('vendor/orders/<int:order_id>/status/', order_views.update_order_status_api, name='update_order_status'),
     path('orders/vendor/pending/', order_views.vendor_pending_orders_api, name='vendor_pending_orders'),
+    
+    # Order Accept/Reject endpoints - CRITICAL: These must be accessible
+    # Multiple patterns to ensure the endpoint is accessible
     path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='vendor_accept_order'),
     path('orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='vendor_reject_order'),
+    
+    # Alternative patterns for accept/reject (in case of routing issues)
+    path('vendor/orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='vendor_accept_order_alt'),
+    path('vendor/orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='vendor_reject_order_alt'),
+    
+    # Debug endpoint to test URL routing
+    path('orders/test/', order_views.test_order_endpoint, name='test_order_endpoint'),
+    path('orders/debug/', order_views.debug_vendor_orders_api, name='debug_vendor_orders'),
+    path('orders/<int:order_id>/check/', order_views.check_order_exists_api, name='check_order_exists'),
+    path('orders/<int:order_id>/quick-update/', order_views.quick_update_order_status_api, name='quick_update_order_status'),
+    
+    # Get calculated delivery fee for an order
+    path('orders/<int:order_id>/delivery-fee/', order_views.get_calculated_delivery_fee_api, name='get_calculated_delivery_fee'),
     
     # Review URLs
     path('orders/<int:order_id>/review/', order_views.create_review_api, name='create_review'),

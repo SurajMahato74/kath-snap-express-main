@@ -19,13 +19,51 @@ from .models import CustomUser, VendorProfile
 from .consumers import send_vendor_notification
 from .notification_utils import send_order_status_notifications, send_payment_notification, send_refund_notification
 
+def calculate_delivery_fee(order):
+    """Calculate delivery fee for an order based on product settings"""
+    calculated_fee = 0
+    has_free_delivery = False
+    
+    for item in order.items.all():
+        product = item.product
+        
+        # Check if any item has free delivery
+        if product.free_delivery:
+            has_free_delivery = True
+            break
+        
+        # Check if product has custom delivery fee
+        if product.custom_delivery_fee_enabled and product.custom_delivery_fee:
+            calculated_fee = max(calculated_fee, float(product.custom_delivery_fee))
+    
+    if has_free_delivery:
+        return 0
+    elif calculated_fee > 0:
+        return calculated_fee
+    else:
+        # Use vendor's default delivery fee or 0
+        return float(order.vendor.delivery_fee or 0)
+
 # Customer Order Views
 class CustomerOrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
         return Order.objects.filter(customer=self.request.user).order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception:
+            # Return empty page if pagination fails
+            return Response({
+                'count': 0,
+                'next': None,
+                'previous': None,
+                'results': []
+            })
 
 class CustomerOrderDetailView(generics.RetrieveAPIView):
     serializer_class = OrderSerializer
@@ -37,25 +75,50 @@ class CustomerOrderDetailView(generics.RetrieveAPIView):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def create_order_api(request):
-    """Create a new order"""
+    """Create new orders (separate orders for each vendor)"""
     serializer = CreateOrderSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
-        order = serializer.save()
+        # Get all created orders by modifying the serializer temporarily
+        items_data = request.data.get('items', [])
+        customer = request.user
         
-        # Send comprehensive order status notifications
-        send_order_status_notifications(order, 'pending')
+        # Group items by vendor to get all orders that will be created
+        vendor_items = {}
+        for item_data in items_data:
+            from .models import Product
+            product = Product.objects.get(id=item_data['product_id'])
+            vendor_id = product.vendor.id
+            if vendor_id not in vendor_items:
+                vendor_items[vendor_id] = product.vendor
         
-        print(f"Order created: {order.id} for vendor: {order.vendor.business_name}")
-        print(f"FCM Token exists: {bool(order.vendor.fcm_token)}")
-        if order.vendor.fcm_token:
-            print(f"FCM Token: {order.vendor.fcm_token[:30]}...")
-        else:
-            print("No FCM token found for vendor")
+        # Create the orders using the serializer
+        first_order = serializer.save()
+        
+        # Get all orders created for this customer in the last minute (to catch all related orders)
+        from django.utils import timezone
+        from datetime import timedelta
+        recent_orders = Order.objects.filter(
+            customer=customer,
+            created_at__gte=timezone.now() - timedelta(minutes=1)
+        ).order_by('-created_at')
+        
+        # Filter to only orders from the vendors we're creating orders for
+        created_orders = []
+        for order in recent_orders:
+            if order.vendor.id in vendor_items.keys():
+                created_orders.append(order)
+                # Send notifications for each order
+                send_order_status_notifications(order, 'pending')
+                print(f"Order created: {order.id} for vendor: {order.vendor.business_name}")
+        
+        # Limit to the number of vendors we expect
+        created_orders = created_orders[:len(vendor_items)]
         
         return Response({
-            'message': 'Order created successfully',
-            'order': OrderSerializer(order, context={'request': request}).data,
-            'fcm_token_exists': bool(order.vendor.fcm_token)
+            'message': f'{len(created_orders)} order(s) created successfully',
+            'orders': [OrderSerializer(order, context={'request': request}).data for order in created_orders],
+            'total_orders': len(created_orders),
+            'vendors': [order.vendor.business_name for order in created_orders]
         }, status=status.HTTP_201_CREATED)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -129,7 +192,16 @@ class VendorOrderListView(generics.ListAPIView):
     def get_queryset(self):
         try:
             vendor_profile = VendorProfile.objects.get(user=self.request.user, is_approved=True)
-            queryset = Order.objects.filter(vendor=vendor_profile)
+            print(f"🔥 VendorOrderListView - User: {self.request.user.username}, Vendor ID: {vendor_profile.id}, Business: {vendor_profile.business_name}")
+            
+            # Show all orders for this vendor
+            queryset = Order.objects.filter(
+                vendor=vendor_profile
+            )
+            
+            print(f"🔥 Orders for vendor {vendor_profile.id}: {queryset.count()} orders")
+            for order in queryset[:5]:  # Log first 5 orders
+                print(f"🔥 Order {order.id}: Vendor={order.vendor.business_name} (ID={order.vendor.id}), Customer={order.customer.username}")
             
             # Filter by status
             status_filter = self.request.query_params.get('status')
@@ -146,17 +218,91 @@ class VendorOrderListView(generics.ListAPIView):
             
             return queryset.order_by('-created_at')
         except VendorProfile.DoesNotExist:
+            print(f"🔥 No vendor profile found for user: {self.request.user.username}")
             return Order.objects.none()
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception:
+            # Return empty page if pagination fails
+            return Response({
+                'count': 0,
+                'next': None,
+                'previous': None,
+                'results': []
+            })
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def update_order_status_api(request, order_id):
     """Update order status (vendor only)"""
+    print(f"🔥 UPDATE ORDER STATUS API - Order ID: {order_id}, User: {request.user}")
+    print(f"🔥 Request data: {request.data}")
     
     try:
-        vendor_profile = VendorProfile.objects.get(user=request.user)
-        order = Order.objects.get(id=order_id, vendor=vendor_profile)
+        # First check if order exists at all
+        try:
+            order_check = Order.objects.get(id=order_id)
+            print(f"🔥 Order {order_id} exists - Status: {order_check.status}, Vendor: {order_check.vendor.business_name}")
+        except Order.DoesNotExist:
+            print(f"🔥 Order {order_id} does not exist")
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
         
+        # Check vendor profile
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user)
+            print(f"🔥 Vendor profile found: {vendor_profile.business_name}")
+        except VendorProfile.DoesNotExist:
+            print(f"🔥 No vendor profile for user: {request.user}")
+            return Response({'error': 'Vendor profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if order belongs to this vendor (allow superuser override or if user is the customer)
+        if order_check.vendor != vendor_profile and not request.user.is_superuser and order_check.customer != request.user:
+            print(f"🔥 Order belongs to different vendor: {order_check.vendor.business_name}")
+            return Response({'error': 'Order does not belong to your vendor profile'}, status=status.HTTP_403_FORBIDDEN)
+        
+        order = order_check
+        
+        # Handle the specific case for out_for_delivery status
+        if request.data.get('status') == 'out_for_delivery':
+            # Extract delivery information from request
+            delivery_boy_phone = request.data.get('delivery_boy_phone', '')
+            vehicle_number = request.data.get('vehicle_number', '')
+            vehicle_color = request.data.get('vehicle_color', '')
+            estimated_delivery_time = request.data.get('estimated_delivery_time', '10')
+            delivery_fee = request.data.get('delivery_fee', 0)
+            notes = request.data.get('notes', 'Order shipped with delivery details')
+            
+            # Update order status and delivery info
+            old_status = order.status
+            order.status = 'out_for_delivery'
+            order.out_for_delivery_at = timezone.now()
+            order.delivery_boy_phone = delivery_boy_phone
+            order.vehicle_number = vehicle_number
+            order.vehicle_color = vehicle_color
+            order.estimated_delivery_time = estimated_delivery_time
+            order.delivery_fee = delivery_fee
+            order.notes = notes
+            order.save()
+            
+            # Create status history
+            OrderStatusHistory.objects.create(
+                order=order,
+                status='out_for_delivery',
+                changed_by=request.user,
+                notes=notes
+            )
+            
+            # Send notifications
+            send_order_status_notifications(order, 'out_for_delivery', old_status)
+            
+            return Response({
+                'message': 'Order status updated to out for delivery',
+                'order': OrderSerializer(order, context={'request': request}).data
+            })
+        
+        # Handle other status updates using serializer
         serializer = UpdateOrderStatusSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -173,20 +319,6 @@ def update_order_status_api(request, order_id):
             order.confirmed_at = timezone.now()
         elif new_status == 'preparing':
             order.prepared_at = timezone.now()
-        elif new_status == 'out_for_delivery':
-            order.out_for_delivery_at = timezone.now()
-            
-            # Save delivery information
-            order.delivery_boy_phone = serializer.validated_data.get('delivery_boy_phone')
-            order.vehicle_number = serializer.validated_data.get('vehicle_number')
-            order.vehicle_color = serializer.validated_data.get('vehicle_color')
-            order.estimated_delivery_time = serializer.validated_data.get('estimated_delivery_time')
-            
-            # Update delivery fee if provided
-            delivery_fee = serializer.validated_data.get('delivery_fee')
-            if delivery_fee is not None:
-                order.delivery_fee = delivery_fee
-                # Do NOT update total_amount - delivery fee is separate from bill total
         elif new_status == 'delivered':
             order.delivered_at = timezone.now()
             if hasattr(order, 'delivery'):
@@ -212,8 +344,11 @@ def update_order_status_api(request, order_id):
             'order': OrderSerializer(order, context={'request': request}).data
         })
         
-    except (VendorProfile.DoesNotExist, Order.DoesNotExist):
-        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"🔥 Error in update_order_status_api: {str(e)}")
+        import traceback
+        print(f"🔥 Traceback: {traceback.format_exc()}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # Review Views
 @api_view(['POST'])
@@ -565,6 +700,8 @@ def vendor_pending_orders_api(request):
     """Get pending orders for vendor"""
     try:
         vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+        
+        # Get pending orders for this vendor
         orders = Order.objects.filter(
             vendor=vendor_profile, 
             status='pending'
@@ -580,10 +717,39 @@ def vendor_pending_orders_api(request):
 @permission_classes([permissions.IsAuthenticated])
 def vendor_accept_order_api(request, order_id):
     """Accept an order (vendor only)"""
+    print(f"🔥 VENDOR ACCEPT ORDER API CALLED - Order ID: {order_id}, User: {request.user}")
     
     try:
         vendor_profile = VendorProfile.objects.get(user=request.user)
-        order = Order.objects.get(id=order_id, vendor=vendor_profile, status='pending')
+        print(f"🔥 Found vendor profile: ID={vendor_profile.id}, Name={vendor_profile.business_name}")
+        
+        # Check if order exists at all
+        try:
+            order_check = Order.objects.get(id=order_id)
+            print(f"🔥 Order {order_id} exists - Status: {order_check.status}, Vendor ID: {order_check.vendor.id}, Vendor: {order_check.vendor.business_name}")
+        except Order.DoesNotExist:
+            print(f"🔥 Order {order_id} does not exist in database")
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if order belongs to this vendor
+        if order_check.vendor != vendor_profile:
+            print(f"🔥 Order belongs to different vendor: {order_check.vendor.business_name}")
+            return Response({
+                'error': 'This order does not belong to your vendor profile',
+                'details': f'Order belongs to {order_check.vendor.business_name}'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Additional check: Don't allow vendors to accept their own orders
+        if order_check.customer == request.user:
+            print(f"🔥 Vendor trying to accept their own order")
+            return Response({'error': 'Cannot accept your own order'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check order status
+        if order_check.status != 'pending':
+            print(f"🔥 Order status is {order_check.status}, not pending")
+            return Response({'error': f'Order status is {order_check.status}, cannot accept'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        order = order_check
         
         # Get charge for this order amount
         from .models import ChargeRate, VendorWallet
@@ -750,3 +916,184 @@ def upload_refund_document_api(request, refund_id):
         
     except OrderRefund.DoesNotExist:
         return Response({'error': 'Refund not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_calculated_delivery_fee_api(request, order_id):
+    """Get calculated delivery fee for an order"""
+    try:
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        order = Order.objects.get(id=order_id, vendor=vendor_profile)
+        
+        calculated_fee = calculate_delivery_fee(order)
+        
+        return Response({
+            'delivery_fee': calculated_fee,
+            'order_id': order_id
+        })
+        
+    except (VendorProfile.DoesNotExist, Order.DoesNotExist):
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def debug_vendor_orders_api(request):
+    """Debug endpoint to show vendor order mapping"""
+    try:
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        
+        # Get all orders for this vendor
+        vendor_orders = Order.objects.filter(vendor=vendor_profile)
+        
+        # Get all orders in system for comparison
+        all_orders = Order.objects.all()[:10]  # Limit to 10 for debugging
+        
+        return Response({
+            'current_user': request.user.username,
+            'vendor_profile_id': vendor_profile.id,
+            'vendor_business_name': vendor_profile.business_name,
+            'vendor_orders': [
+                {
+                    'id': order.id,
+                    'status': order.status,
+                    'customer': order.customer.username,
+                    'total': float(order.total_amount)
+                } for order in vendor_orders
+            ],
+            'all_orders_sample': [
+                {
+                    'id': order.id,
+                    'vendor_id': order.vendor.id,
+                    'vendor_name': order.vendor.business_name,
+                    'customer': order.customer.username,
+                    'status': order.status
+                } for order in all_orders
+            ]
+        })
+        
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'No vendor profile found'}, status=status.HTTP_404_NOT_FOUND)
+
+# Debug endpoint
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.IsAuthenticated])
+def test_order_endpoint(request):
+    """Test endpoint to verify URL routing is working"""
+    print(f"🔥 TEST ORDER ENDPOINT CALLED - Method: {request.method}, User: {request.user}")
+    return Response({
+        'message': 'Order URL routing is working!',
+        'method': request.method,
+        'user': str(request.user),
+        'timestamp': timezone.now().isoformat()
+    })
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def check_order_exists_api(request, order_id):
+    """Check if an order exists and show details"""
+    try:
+        order = Order.objects.get(id=order_id)
+        return Response({
+            'exists': True,
+            'order_id': order.id,
+            'status': order.status,
+            'vendor_id': order.vendor.id,
+            'vendor_name': order.vendor.business_name,
+            'customer': order.customer.username,
+            'total_amount': float(order.total_amount),
+            'created_at': order.created_at.isoformat()
+        })
+    except Order.DoesNotExist:
+        # Show all orders to help debug
+        all_orders = Order.objects.all().values('id', 'status', 'vendor__business_name', 'customer__username')[:10]
+        return Response({
+            'exists': False,
+            'order_id': order_id,
+            'message': f'Order {order_id} not found',
+            'available_orders': list(all_orders)
+        })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def quick_update_order_status_api(request, order_id):
+    """Quick order status update without complex validation - for debugging"""
+    print(f"🔥 QUICK UPDATE ORDER STATUS - Order ID: {order_id}, User: {request.user}")
+    print(f"🔥 Request data: {request.data}")
+    
+    try:
+        # Check if order exists
+        order = Order.objects.get(id=order_id)
+        print(f"🔥 Order found: {order.order_number}, Status: {order.status}")
+        
+        # Check vendor permission (allow superuser override)
+        if not request.user.is_superuser:
+            try:
+                vendor_profile = VendorProfile.objects.get(user=request.user)
+                if order.vendor != vendor_profile:
+                    return Response({'error': 'Order does not belong to your vendor profile'}, status=status.HTTP_403_FORBIDDEN)
+            except VendorProfile.DoesNotExist:
+                return Response({'error': 'Vendor profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Update order directly without serializer validation
+        new_status = request.data.get('status')
+        if new_status:
+            old_status = order.status
+            order.status = new_status
+            
+            # Update delivery info if provided
+            if request.data.get('delivery_boy_phone'):
+                order.delivery_boy_phone = request.data.get('delivery_boy_phone')
+            if request.data.get('vehicle_number'):
+                order.vehicle_number = request.data.get('vehicle_number')
+            if request.data.get('vehicle_color'):
+                order.vehicle_color = request.data.get('vehicle_color')
+            if request.data.get('estimated_delivery_time'):
+                order.estimated_delivery_time = request.data.get('estimated_delivery_time')
+            if request.data.get('delivery_fee') is not None:
+                order.delivery_fee = request.data.get('delivery_fee')
+            if request.data.get('notes'):
+                order.notes = request.data.get('notes')
+            
+            # Update timestamps
+            if new_status == 'out_for_delivery':
+                order.out_for_delivery_at = timezone.now()
+            elif new_status == 'delivered':
+                order.delivered_at = timezone.now()
+            elif new_status == 'confirmed':
+                order.confirmed_at = timezone.now()
+            
+            order.save()
+            print(f"🔥 Order updated successfully: {old_status} -> {new_status}")
+            
+            # Create status history
+            OrderStatusHistory.objects.create(
+                order=order,
+                status=new_status,
+                changed_by=request.user,
+                notes=request.data.get('notes', f'Status updated to {new_status}')
+            )
+            
+            return Response({
+                'success': True,
+                'message': f'Order status updated to {new_status}',
+                'order': {
+                    'id': order.id,
+                    'order_number': order.order_number,
+                    'status': order.status,
+                    'delivery_boy_phone': order.delivery_boy_phone,
+                    'vehicle_number': order.vehicle_number,
+                    'vehicle_color': order.vehicle_color,
+                    'estimated_delivery_time': order.estimated_delivery_time,
+                    'delivery_fee': float(order.delivery_fee or 0),
+                    'notes': order.notes
+                }
+            })
+        else:
+            return Response({'error': 'Status is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Order.DoesNotExist:
+        print(f"🔥 Order {order_id} not found")
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"🔥 Error: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

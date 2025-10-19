@@ -195,76 +195,88 @@ class CreateOrderSerializer(serializers.Serializer):
         items_data = validated_data.pop('items')
         customer = self.context['request'].user
         
-        # Get vendor from first item (assuming all items are from same vendor)
-        first_product = Product.objects.get(id=items_data[0]['product_id'])
-        vendor = first_product.vendor
-        
-        # Calculate totals
-        subtotal = 0
-        order_items = []
-        
+        # Group items by vendor
+        vendor_items = {}
         for item_data in items_data:
             product = Product.objects.get(id=item_data['product_id'])
+            vendor_id = product.vendor.id
+            
+            if vendor_id not in vendor_items:
+                vendor_items[vendor_id] = {
+                    'vendor': product.vendor,
+                    'items': []
+                }
+            
             quantity = int(item_data['quantity'])
             unit_price = product.price
             total_price = unit_price * quantity
             
-            order_items.append({
+            vendor_items[vendor_id]['items'].append({
                 'product': product,
                 'quantity': quantity,
                 'unit_price': unit_price,
                 'total_price': total_price
             })
-            
-            subtotal += total_price
         
-        # Calculate fees
+        # Create separate orders for each vendor
+        created_orders = []
         from decimal import Decimal
-        delivery_fee = Decimal('0')  # No delivery fee in bill
-        tax_amount = Decimal('0')  # No tax
-        total_amount = subtotal  # Subtotal only
         
-        # Create order
-        order = Order.objects.create(
-            customer=customer,
-            vendor=vendor,
-            delivery_name=validated_data['delivery_name'],
-            delivery_phone=validated_data['delivery_phone'],
-            delivery_address=validated_data['delivery_address'],
-            delivery_latitude=validated_data['delivery_latitude'],
-            delivery_longitude=validated_data['delivery_longitude'],
-            delivery_instructions=validated_data.get('delivery_instructions', ''),
-            delivery_distance=validated_data.get('delivery_distance', 0),
-            payment_method=validated_data['payment_method'],
-            subtotal=subtotal,
-            delivery_fee=delivery_fee,
-            tax_amount=tax_amount,
-            total_amount=total_amount,
-            notes=validated_data.get('notes', '')
-        )
-        
-        # Create order items
-        for item_data in order_items:
-            OrderItem.objects.create(
-                order=order,
-                **item_data
+        for vendor_data in vendor_items.values():
+            vendor = vendor_data['vendor']
+            order_items = vendor_data['items']
+            
+            # Calculate totals for this vendor
+            subtotal = sum(item['total_price'] for item in order_items)
+            delivery_fee = Decimal('0')  # No delivery fee in bill
+            tax_amount = Decimal('0')  # No tax
+            total_amount = subtotal  # Subtotal only
+            
+            # Create order for this vendor
+            order = Order.objects.create(
+                customer=customer,
+                vendor=vendor,
+                delivery_name=validated_data['delivery_name'],
+                delivery_phone=validated_data['delivery_phone'],
+                delivery_address=validated_data['delivery_address'],
+                delivery_latitude=validated_data['delivery_latitude'],
+                delivery_longitude=validated_data['delivery_longitude'],
+                delivery_instructions=validated_data.get('delivery_instructions', ''),
+                delivery_distance=validated_data.get('delivery_distance', 0),
+                payment_method=validated_data['payment_method'],
+                subtotal=subtotal,
+                delivery_fee=delivery_fee,
+                tax_amount=tax_amount,
+                total_amount=total_amount,
+                notes=validated_data.get('notes', '')
             )
+            
+            # Create order items for this vendor
+            for item_data in order_items:
+                OrderItem.objects.create(
+                    order=order,
+                    **item_data
+                )
+            
+            # Create status history
+            OrderStatusHistory.objects.create(
+                order=order,
+                status='pending',
+                changed_by=customer,
+                notes='Order placed'
+            )
+            
+            # Update product quantities
+            for item_data in order_items:
+                product = item_data['product']
+                product.quantity -= item_data['quantity']
+                product.save()
+            
+            created_orders.append(order)
         
-        # Create status history
-        OrderStatusHistory.objects.create(
-            order=order,
-            status='pending',
-            changed_by=customer,
-            notes='Order placed'
-        )
-        
-        # Update product quantities
-        for item_data in items_data:
-            product = Product.objects.get(id=item_data['product_id'])
-            product.quantity -= int(item_data['quantity'])
-            product.save()
-        
-        return order
+        # Return the first order (for backward compatibility)
+        # The frontend should handle multiple orders in the response
+        return created_orders[0] if created_orders else None
 
 class UpdateOrderStatusSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Order.ORDER_STATUS_CHOICES)

@@ -10,8 +10,8 @@ class UserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'username', 'email', 'user_type', 'phone_number', 'address', 
                   'date_of_birth', 'profile_picture', 'profile_picture_url', 'google_id', 'is_verified', 'email_verified', 
-                  'phone_verified', 'created_at', 'plain_password', 'first_name', 'last_name']
-        read_only_fields = ['id', 'created_at', 'is_verified', 'email_verified', 'phone_verified', 'google_id']
+                  'phone_verified', 'privacy_policy_agreed', 'created_at', 'plain_password', 'first_name', 'last_name', 'referral_code']
+        read_only_fields = ['id', 'created_at', 'is_verified', 'email_verified', 'phone_verified', 'google_id', 'referral_code']
     
     def validate_date_of_birth(self, value):
         # Convert empty string to None for DateField
@@ -121,6 +121,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
     is_active = serializers.SerializerMethodField()
     documents = serializers.SerializerMethodField()
     shop_images = serializers.SerializerMethodField()
+    referral_code = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = VendorProfile
@@ -145,7 +146,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'saturday_open', 'saturday_close', 'saturday_closed',
             'sunday_open', 'sunday_close', 'sunday_closed',
             'is_active', 'status_override', 'status_override_date',
-            'documents', 'shop_images', 'created_at', 'updated_at'
+            'documents', 'shop_images', 'referral_code', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'is_approved', 'approval_date', 'is_rejected', 'rejection_reason', 'rejection_date', 'is_active', 'created_at', 'updated_at']
     
@@ -189,7 +190,8 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'phone_number': obj.user.phone_number,
             'date_joined': obj.user.date_joined,
             'profile_picture': profile_picture_url,
-            'plain_password': obj.user.plain_password
+            'plain_password': obj.user.plain_password,
+            'referral_code': obj.user.referral_code
         }
 
     def get_business_license_file_url(self, obj):
@@ -325,6 +327,23 @@ class VendorProfileSerializer(serializers.ModelSerializer):
                 if attrs[open_field] and attrs[close_field]:
                     if attrs[open_field] >= attrs[close_field]:
                         raise serializers.ValidationError({open_field: f'{day.capitalize()} opening time must be before closing time.'})
+
+        # Validate referral code if provided
+        if 'referral_code' in attrs and attrs['referral_code']:
+            referral_code = attrs['referral_code'].strip().upper()
+            if referral_code:
+                try:
+                    referring_user = CustomUser.objects.get(referral_code=referral_code, user_type='vendor')
+                    # Check if referring vendor is approved
+                    try:
+                        referring_vendor = VendorProfile.objects.get(user=referring_user, is_approved=True)
+                    except VendorProfile.DoesNotExist:
+                        raise serializers.ValidationError({'referral_code': 'Referral code belongs to an unapproved vendor.'})
+                except CustomUser.DoesNotExist:
+                    raise serializers.ValidationError({'referral_code': 'Invalid referral code.'})
+                
+                # Update the referral code to uppercase
+                attrs['referral_code'] = referral_code
 
         return attrs
 
@@ -566,7 +585,7 @@ class CustomerProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'category', 'subcategory', 'price', 'quantity',
             'description', 'short_description', 'tags', 'featured', 'free_delivery',
-            'custom_delivery_fee_enabled', 'custom_delivery_fee', 'images',
+            'custom_delivery_fee_enabled', 'custom_delivery_fee', 'dynamic_fields', 'images',
             'vendor_name', 'vendor_id', 'vendor_latitude', 'vendor_longitude', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']

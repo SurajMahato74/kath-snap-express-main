@@ -2,6 +2,7 @@ from django.urls import path, include
 from . import api_views, notification_views
 from .notification_api import check_notifications
 from .broadcast_api import broadcast_message
+from .token_refresh_api import refresh_token_api
 
 urlpatterns = [
     # Test API
@@ -17,6 +18,7 @@ urlpatterns = [
     path('auth/facebook/', api_views.facebook_oauth_api, name='api_facebook_oauth'),
     path('setup-password/', api_views.setup_password_api, name='api_setup_password'),
     path('check-password-setup/', api_views.check_password_setup_api, name='api_check_password_setup'),
+    path('agree-privacy-policy/', api_views.agree_privacy_policy_api, name='api_agree_privacy_policy'),
     
     # Profile APIs
     path('profile/', api_views.profile_api, name='api_profile'),
@@ -103,6 +105,8 @@ urlpatterns = [
     # Order Management APIs
     path('', include('accounts.order_urls')),
     
+
+    
     # Messaging APIs
     path('messaging/', include('accounts.message_urls')),
     
@@ -122,6 +126,9 @@ urlpatterns = [
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='api_register_fcm_token'),
     
+    # Token refresh
+    path('refresh-token/', refresh_token_api, name='api_refresh_token'),
+    
     # Test FCM Notification
     path('test-fcm-notification/', api_views.test_fcm_notification_api, name='api_test_fcm_notification'),
     
@@ -139,4 +146,7 @@ urlpatterns = [
     path('featured-packages/purchase/', api_views.purchase_featured_package_api, name='api_purchase_featured_package'),
     path('products/<int:product_id>/featured-info/', api_views.get_product_featured_info_api, name='api_get_product_featured_info'),
     path('products/<int:product_id>/reschedule-featured/', api_views.reschedule_featured_package_api, name='api_reschedule_featured_package'),
+    
+    # Referral API
+    path('validate-referral-code/', api_views.validate_referral_code_api, name='api_validate_referral_code'),
 ]

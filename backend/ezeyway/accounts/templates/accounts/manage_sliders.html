@@ -197,6 +197,11 @@
                                     <!-- Action Buttons -->
                                     <div class="col-6">
                                         <div class="btn-group w-100" role="group">
+                                            <!-- Edit -->
+                                            <a href="{% url 'edit_slider' slider.id %}" class="btn btn-sm btn-info" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            
                                             <!-- Toggle Status -->
                                             <form method="post" class="d-inline">
                                                 {% csrf_token %}

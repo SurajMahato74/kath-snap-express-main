@@ -12,6 +12,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import json
 from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification, VendorDocument, VendorShopImage
+from .parameter_models import CategoryParameter, SubCategoryParameter
 from .message_models import Conversation, Message, MessageRead
 from .order_models import Order, OrderItem, PaymentTransaction
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
@@ -24,22 +25,45 @@ def login_view(request):
         username = request.POST.get('username')
         password = request.POST.get('password')
         
+        if not username or not password:
+            messages.error(request, 'Please enter both username and password')
+            return render(request, 'accounts/login.html')
+        
+        # Try to authenticate with username first, then email
         user = authenticate(request, username=username, password=password)
+        
+        # If username auth failed, try email
+        if user is None:
+            try:
+                user_by_email = CustomUser.objects.get(email=username)
+                user = authenticate(request, username=user_by_email.username, password=password)
+            except CustomUser.DoesNotExist:
+                pass
+        
         if user is not None:
+            if not user.is_active:
+                messages.error(request, 'Your account has been deactivated. Please contact support.')
+                return render(request, 'accounts/login.html')
+            
             # Superusers don't need email verification
             if not user.email_verified and not user.is_superuser:
                 messages.warning(request, 'Please verify your email before logging in.')
                 return redirect('verify_email_prompt', user_id=user.id)
             
             login(request, user)
+            
+            # Redirect based on user type
             if user.is_superuser:
+                messages.success(request, f'Welcome back, {user.username}!')
                 return redirect('superadmin_dashboard')
-            elif user.is_vendor:
+            elif user.user_type == 'vendor':
                 return redirect('vendor_wallet')
             else:
-                return redirect('superadmin_dashboard')
+                # Regular users should use the React frontend
+                messages.info(request, 'Please use the main application for customer login.')
+                return redirect('/')
         else:
-            messages.error(request, 'Invalid username/email or password')
+            messages.error(request, 'Invalid username/email or password. Please check your credentials and try again.')
     
     return render(request, 'accounts/login.html')
 
@@ -619,6 +643,68 @@ def manage_categories(request):
             else:
                 messages.error(request, 'Subcategory name is required.')
         
+        elif action == 'add_parameter':
+            target_id = request.POST.get('target_id')
+            target_type = request.POST.get('target_type')
+            param_name = request.POST.get('param_name')
+            param_label = request.POST.get('param_label')
+            param_type = request.POST.get('param_type')
+            param_placeholder = request.POST.get('param_placeholder')
+            param_order = request.POST.get('param_order', 0)
+            param_required = request.POST.get('param_required') == 'on'
+            param_options = request.POST.get('param_options')
+            param_min = request.POST.get('param_min')
+            param_max = request.POST.get('param_max')
+            param_step = request.POST.get('param_step')
+            
+            if target_id and target_type and param_name and param_label and param_type:
+                try:
+                    # Parse options if provided
+                    options = []
+                    if param_options:
+                        try:
+                            options = json.loads(param_options)
+                        except json.JSONDecodeError:
+                            options = [opt.strip() for opt in param_options.split('\n') if opt.strip()]
+                    
+                    if target_type == 'category':
+                        category = Category.objects.get(id=target_id)
+                        CategoryParameter.objects.create(
+                            category=category,
+                            name=param_name,
+                            label=param_label,
+                            field_type=param_type,
+                            is_required=param_required,
+                            options=options,
+                            placeholder=param_placeholder,
+                            display_order=int(param_order),
+                            min_value=float(param_min) if param_min else None,
+                            max_value=float(param_max) if param_max else None,
+                            step=float(param_step) if param_step else None
+                        )
+                    elif target_type == 'subcategory':
+                        subcategory = SubCategory.objects.get(id=target_id)
+                        SubCategoryParameter.objects.create(
+                            subcategory=subcategory,
+                            name=param_name,
+                            label=param_label,
+                            field_type=param_type,
+                            is_required=param_required,
+                            options=options,
+                            placeholder=param_placeholder,
+                            display_order=int(param_order),
+                            min_value=float(param_min) if param_min else None,
+                            max_value=float(param_max) if param_max else None,
+                            step=float(param_step) if param_step else None
+                        )
+                    messages.success(request, 'Parameter added successfully!')
+                except (Category.DoesNotExist, SubCategory.DoesNotExist):
+                    messages.error(request, 'Target not found.')
+                except Exception as e:
+                    messages.error(request, f'Error adding parameter: {str(e)}')
+            else:
+                messages.error(request, 'All required fields must be filled.')
+        
         return redirect('manage_categories')
     
     categories = Category.objects.prefetch_related('subcategories').all().order_by('display_order', 'name')
@@ -874,6 +960,66 @@ def manage_sliders(request):
             except ValueError:
                 messages.error(request, 'Invalid order value.')
         
+        elif action == 'edit':
+            slider_id = request.POST.get('slider_id')
+            title = request.POST.get('title')
+            description = request.POST.get('description')
+            link_url = request.POST.get('link_url')
+            visibility = request.POST.get('visibility')
+            display_order = request.POST.get('display_order')
+            start_date = request.POST.get('start_date')
+            end_date = request.POST.get('end_date')
+            image = request.FILES.get('image')
+            
+            try:
+                slider = Slider.objects.get(id=slider_id)
+                
+                if title:
+                    slider.title = title
+                if description is not None:
+                    slider.description = description
+                if link_url is not None:
+                    slider.link_url = link_url if link_url else None
+                if visibility:
+                    slider.visibility = visibility
+                if display_order is not None:
+                    slider.display_order = int(display_order) if display_order else 0
+                
+                # Handle image update
+                if image:
+                    # Validate image format
+                    allowed_formats = ['gif', 'png', 'svg', 'jpg', 'jpeg']
+                    file_extension = image.name.split('.')[-1].lower()
+                    
+                    if file_extension not in allowed_formats:
+                        messages.error(request, 'Invalid file format. Please upload GIF, PNG, SVG, or JPEG files only.')
+                        return redirect('manage_sliders')
+                    
+                    # Delete old image
+                    if slider.image:
+                        slider.image.delete()
+                    slider.image = image
+                
+                # Handle date fields
+                if start_date:
+                    from datetime import datetime
+                    slider.start_date = datetime.strptime(start_date, '%Y-%m-%dT%H:%M')
+                elif start_date == '':
+                    slider.start_date = None
+                    
+                if end_date:
+                    from datetime import datetime
+                    slider.end_date = datetime.strptime(end_date, '%Y-%m-%dT%H:%M')
+                elif end_date == '':
+                    slider.end_date = None
+                
+                slider.save()
+                messages.success(request, 'Slider updated successfully!')
+            except Slider.DoesNotExist:
+                messages.error(request, 'Slider not found.')
+            except Exception as e:
+                messages.error(request, f'Error updating slider: {str(e)}')
+        
         return redirect('manage_sliders')
     
     sliders = Slider.objects.all().order_by('display_order', 'created_at')
@@ -881,6 +1027,74 @@ def manage_sliders(request):
         'sliders': sliders,
     }
     return render(request, 'accounts/manage_sliders.html', context)
+
+@login_required
+def edit_slider(request, slider_id):
+    if not request.user.is_superuser:
+        messages.error(request, 'Access denied.')
+        return redirect('login')
+    
+    slider = get_object_or_404(Slider, id=slider_id)
+    
+    if request.method == 'POST':
+        title = request.POST.get('title')
+        description = request.POST.get('description')
+        link_url = request.POST.get('link_url')
+        visibility = request.POST.get('visibility')
+        display_order = request.POST.get('display_order')
+        start_date = request.POST.get('start_date')
+        end_date = request.POST.get('end_date')
+        image = request.FILES.get('image')
+        
+        if title:
+            try:
+                slider.title = title
+                slider.description = description if description else ''
+                slider.link_url = link_url if link_url else None
+                slider.visibility = visibility
+                slider.display_order = int(display_order) if display_order else 0
+                
+                # Handle image update
+                if image:
+                    # Validate image format
+                    allowed_formats = ['gif', 'png', 'svg', 'jpg', 'jpeg']
+                    file_extension = image.name.split('.')[-1].lower()
+                    
+                    if file_extension not in allowed_formats:
+                        messages.error(request, 'Invalid file format. Please upload GIF, PNG, SVG, or JPEG files only.')
+                        return render(request, 'accounts/edit_slider.html', {'slider': slider})
+                    
+                    # Delete old image
+                    if slider.image:
+                        slider.image.delete()
+                    slider.image = image
+                
+                # Handle date fields
+                if start_date:
+                    from datetime import datetime
+                    slider.start_date = datetime.strptime(start_date, '%Y-%m-%dT%H:%M')
+                elif start_date == '':
+                    slider.start_date = None
+                    
+                if end_date:
+                    from datetime import datetime
+                    slider.end_date = datetime.strptime(end_date, '%Y-%m-%dT%H:%M')
+                elif end_date == '':
+                    slider.end_date = None
+                
+                slider.save()
+                messages.success(request, 'Slider updated successfully!')
+                return redirect('manage_sliders')
+                
+            except Exception as e:
+                messages.error(request, f'Error updating slider: {str(e)}')
+        else:
+            messages.error(request, 'Title is required.')
+    
+    context = {
+        'slider': slider,
+    }
+    return render(request, 'accounts/edit_slider.html', context)
 
 @login_required
 def manage_push_notifications(request):
@@ -955,21 +1169,37 @@ def admin_messages(request):
     if not request.user.is_superuser:
         messages.error(request, 'Access denied.')
         return redirect('login')
-    
+
     user_type = request.GET.get('type', 'all')
-    
+
+    # Handle AJAX request for unread count
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        conversations = Conversation.objects.filter(participants=request.user)
+        unread_count = 0
+
+        for conv in conversations:
+            # Count unread messages from other participants
+            unread_messages = Message.objects.filter(
+                conversation=conv
+            ).exclude(sender=request.user).exclude(
+                read_by__user=request.user
+            ).count()
+            unread_count += unread_messages
+
+        return JsonResponse({'unread_count': unread_count})
+
     # Get all conversations and ensure superadmin is added to them
     all_conversations = Conversation.objects.all().order_by('-updated_at')
-    
+
     # Add superadmin to conversations if not already added
     for conv in all_conversations:
         if not conv.participants.filter(id=request.user.id).exists():
             conv.participants.add(request.user)
-    
+
     # Get unique users who have conversations with superadmin
     user_conversations = {}
     conversations = Conversation.objects.filter(participants=request.user).order_by('-updated_at')
-    
+
     for conv in conversations:
         other_users = conv.participants.exclude(id=request.user.id)
         for user in other_users:
@@ -978,17 +1208,17 @@ def admin_messages(request):
                 continue
             elif user_type == 'vendor' and user.user_type != 'vendor':
                 continue
-            
+
             # Keep only the latest conversation for each user
             if user.id not in user_conversations or conv.updated_at > user_conversations[user.id]['conversation'].updated_at:
                 user_conversations[user.id] = {
                     'user': user,
                     'conversation': conv
                 }
-    
+
     # Sort by latest message time
     sorted_conversations = sorted(user_conversations.values(), key=lambda x: x['conversation'].updated_at, reverse=True)
-    
+
     context = {
         'user_conversations': sorted_conversations,
         'user_type': user_type,

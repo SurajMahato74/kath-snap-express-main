@@ -12,6 +12,8 @@ from rest_framework.pagination import PageNumberPagination
 from django.db import transaction
 import math
 import logging
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 
 logger = logging.getLogger(__name__)
 from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider
@@ -99,8 +101,6 @@ def login_api(request):
                 'message': 'Email not verified. OTP sent to your email.'
             }, status=status.HTTP_200_OK)
 
-        token, created = Token.objects.get_or_create(user=user)
-
         # Check if vendor profile exists and approval status
         try:
             vendor_profile = VendorProfile.objects.get(user=user)
@@ -115,6 +115,22 @@ def login_api(request):
             is_rejected = False
             rejection_reason = None
             rejection_date = None
+
+        # Check privacy policy agreement - only show if user has vendor profile or is customer
+        needs_privacy_agreement = False
+        if (profile_exists or user.user_type == 'customer') and not user.privacy_policy_agreed:
+            needs_privacy_agreement = True
+
+        if needs_privacy_agreement:
+            return Response({
+                'needs_privacy_agreement': True,
+                'user_id': user.id,
+                'user_type': user.user_type,
+                'has_vendor_profile': profile_exists,
+                'message': 'Privacy policy agreement required before login.'
+            }, status=status.HTTP_200_OK)
+
+        token, created = Token.objects.get_or_create(user=user)
 
         # Determine available roles - users can be both customer and vendor
         available_roles = ['customer']  # All users can be customers
@@ -149,33 +165,44 @@ def logout_api(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def profile_api(request):
-    user = request.user
-
-    # Check if vendor profile exists and approval status
     try:
-        vendor_profile = VendorProfile.objects.get(user=user)
-        profile_exists = True
-        is_approved = vendor_profile.is_approved
-    except VendorProfile.DoesNotExist:
-        profile_exists = False
-        is_approved = False
+        user = request.user
+        print(f"🔑 Profile API called by user: {user.username}, authenticated: {user.is_authenticated}")
 
-    # Determine available roles - users can be both customer and vendor
-    available_roles = ['customer']  # All users can be customers
+        # Ensure token exists and is valid
+        token, created = Token.objects.get_or_create(user=user)
+        if created:
+            print(f"🔑 Created new token for user: {user.username}")
 
-    # Check if user can be a vendor (has approved profile)
-    if profile_exists and is_approved:
-        available_roles.append('vendor')
+        # Check if vendor profile exists and approval status
+        try:
+            vendor_profile = VendorProfile.objects.get(user=user)
+            profile_exists = True
+            is_approved = vendor_profile.is_approved
+        except VendorProfile.DoesNotExist:
+            profile_exists = False
+            is_approved = False
 
-    # Get user data
-    serializer = UserSerializer(user)
-    user_data = serializer.data
+        # Determine available roles - users can be both customer and vendor
+        available_roles = ['customer']  # All users can be customers
 
-    # Add available_roles to response
-    user_data['available_roles'] = available_roles
-    user_data['current_role'] = user.user_type
+        # Check if user can be a vendor (has approved profile)
+        if profile_exists and is_approved:
+            available_roles.append('vendor')
 
-    return Response(user_data)
+        # Get user data
+        serializer = UserSerializer(user)
+        user_data = serializer.data
+
+        # Add available_roles to response
+        user_data['available_roles'] = available_roles
+        user_data['current_role'] = user.user_type
+        user_data['token'] = token.key  # Include token in response
+
+        return Response(user_data)
+    except Exception as e:
+        print(f"🔑 Profile API error: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -466,8 +493,6 @@ def verify_otp_api(request):
                 user.phone_otp = None
                 user.save()
 
-                token, created = Token.objects.get_or_create(user=user)
-
                 # Check if vendor profile exists and approval status
                 try:
                     vendor_profile = VendorProfile.objects.get(user=user)
@@ -483,15 +508,38 @@ def verify_otp_api(request):
                     rejection_reason = None
                     rejection_date = None
 
+                # Check privacy policy agreement - only show if user has vendor profile or is customer
+                needs_privacy_agreement = False
+                if (profile_exists or user.user_type == 'customer') and not user.privacy_policy_agreed:
+                    needs_privacy_agreement = True
+
+                if needs_privacy_agreement:
+                    return Response({
+                        'needs_privacy_agreement': True,
+                        'user_id': user.id,
+                        'user_type': user.user_type,
+                        'has_vendor_profile': profile_exists,
+                        'message': 'OTP verified. Privacy policy agreement required before login.'
+                    })
+
+                token, created = Token.objects.get_or_create(user=user)
+
+                # Determine available roles
+                available_roles = ['customer']
+                if profile_exists and is_approved:
+                    available_roles.append('vendor')
+
                 return Response({
                     'message': 'OTP verified successfully',
                     'token': token.key,
                     'user': UserSerializer(user).data,
+                    'available_roles': available_roles,
+                    'current_role': user.user_type,
                     'profile_exists': profile_exists,
                     'is_approved': is_approved,
                     'is_rejected': is_rejected,
                     'rejection_reason': rejection_reason,
-                    'rejection_date': rejection_date
+                    'rejection_date': rejection_date.isoformat() if rejection_date else None
                 })
             else:
                 return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
@@ -587,8 +635,37 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
         if default_radius:
             serializer.validated_data['delivery_radius'] = default_radius.radius
         
-        # Allow any user to create vendor profile
-        serializer.save(user=self.request.user)
+        # Handle referral code
+        referral_code = serializer.validated_data.pop('referral_code', None)
+        
+        # Save vendor profile first
+        vendor_profile = serializer.save(user=self.request.user)
+        
+        # Process referral code if provided
+        if referral_code:
+            self.process_referral_code(referral_code, vendor_profile)
+    
+    def process_referral_code(self, referral_code, new_vendor_profile):
+        """Process referral code and award points to both vendors"""
+        try:
+            # Find the referring vendor
+            referring_user = CustomUser.objects.get(referral_code=referral_code, user_type='vendor')
+            referring_vendor = VendorProfile.objects.get(user=referring_user, is_approved=True)
+            
+            # Get or create wallets
+            new_wallet, _ = VendorWallet.objects.get_or_create(vendor=new_vendor_profile)
+            referring_wallet, _ = VendorWallet.objects.get_or_create(vendor=referring_vendor)
+            
+            # Award 200 points to both vendors
+            new_wallet.add_money(200, "Referral bonus - New vendor signup")
+            referring_wallet.add_money(200, f"Referral bonus - Referred {new_vendor_profile.business_name}")
+            
+        except CustomUser.DoesNotExist:
+            # Invalid referral code - silently ignore
+            pass
+        except VendorProfile.DoesNotExist:
+            # Referring vendor not approved - silently ignore
+            pass
 
 class VendorProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = VendorProfileSerializer
@@ -609,24 +686,27 @@ class VendorProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
         all_profiles = VendorProfile.objects.all().values_list('id', flat=True)
         logger.debug(f"All existing profile IDs: {list(all_profiles)}")
         
-        if user.is_superuser:
-            try:
+        try:
+            if user.is_superuser:
+                # Superuser can access any profile
                 profile = VendorProfile.objects.get(pk=pk)
                 logger.debug(f"Superuser found profile: {profile.id} for business: {profile.business_name}")
                 return profile
-            except VendorProfile.DoesNotExist:
-                logger.error(f"Superuser: Profile with pk={pk} not found. Available IDs: {list(all_profiles)}")
-                from rest_framework.exceptions import NotFound
-                raise NotFound('Vendor profile not found')
-        else:
-            try:
-                profile = VendorProfile.objects.get(pk=pk, user=user)
-                logger.debug(f"Regular user found their profile: {profile.id}")
-                return profile
-            except VendorProfile.DoesNotExist:
-                logger.error(f"Regular user: Profile with pk={pk} not found or access denied. Available IDs: {list(all_profiles)}")
-                from rest_framework.exceptions import NotFound
-                raise NotFound('Vendor profile not found')
+            else:
+                # Check if user owns this profile first
+                try:
+                    profile = VendorProfile.objects.get(pk=pk, user=user)
+                    logger.debug(f"User found their own profile: {profile.id}")
+                    return profile
+                except VendorProfile.DoesNotExist:
+                    # If not owner, allow access to approved profiles for public viewing
+                    profile = VendorProfile.objects.get(pk=pk, is_approved=True)
+                    logger.debug(f"Public access to approved profile: {profile.id} for business: {profile.business_name}")
+                    return profile
+        except VendorProfile.DoesNotExist:
+            logger.error(f"Profile with pk={pk} not found or not accessible. Available IDs: {list(all_profiles)}")
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Vendor profile not found')
     
     def retrieve(self, request, *args, **kwargs):
         logger.debug(f"VendorProfileDetailView retrieve called with args: {args}, kwargs: {kwargs}")
@@ -2277,6 +2357,22 @@ def facebook_oauth_api(request):
             rejection_reason = None
             rejection_date = None
         
+        # Check privacy policy agreement - only show if user has vendor profile or is customer
+        needs_privacy_agreement = False
+        if (profile_exists or user.user_type == 'customer') and not user.privacy_policy_agreed:
+            needs_privacy_agreement = True
+
+        if needs_privacy_agreement:
+            return Response({
+                'needs_privacy_agreement': True,
+                'user_id': user.id,
+                'user_type': user.user_type,
+                'has_vendor_profile': profile_exists,
+                'user_created': user_created,
+                'facebook_login': True,
+                'message': 'Privacy policy agreement required before login.'
+            })
+        
         # Determine available roles (EXACT same logic as login_api)
         available_roles = ['customer']  # All users can be customers
         
@@ -2426,6 +2522,22 @@ def google_oauth_api(request):
             rejection_reason = None
             rejection_date = None
         
+        # Check privacy policy agreement - only show if user has vendor profile or is customer
+        needs_privacy_agreement = False
+        if (profile_exists or user.user_type == 'customer') and not user.privacy_policy_agreed:
+            needs_privacy_agreement = True
+
+        if needs_privacy_agreement:
+            return Response({
+                'needs_privacy_agreement': True,
+                'user_id': user.id,
+                'user_type': user.user_type,
+                'has_vendor_profile': profile_exists,
+                'user_created': user_created,
+                'google_login': True,
+                'message': 'Privacy policy agreement required before login.'
+            })
+        
         # Determine available roles (EXACT same logic as login_api)
         available_roles = ['customer']  # All users can be customers
         
@@ -2484,6 +2596,69 @@ def check_password_setup_api(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def agree_privacy_policy_api(request):
+    """Handle privacy policy agreement and complete login"""
+    try:
+        user_id = request.data.get('user_id')
+        agreed = request.data.get('agreed', False)
+        
+        if not user_id:
+            return Response({'error': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not agreed:
+            return Response({'error': 'Privacy policy agreement is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = CustomUser.objects.get(id=user_id)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Update privacy policy agreement
+        user.privacy_policy_agreed = True
+        user.save()
+        
+        # Generate token and complete login
+        token, created = Token.objects.get_or_create(user=user)
+        
+        # Check vendor profile status
+        try:
+            vendor_profile = VendorProfile.objects.get(user=user)
+            profile_exists = True
+            is_approved = vendor_profile.is_approved
+            is_rejected = vendor_profile.is_rejected
+            rejection_reason = vendor_profile.rejection_reason
+            rejection_date = vendor_profile.rejection_date
+        except VendorProfile.DoesNotExist:
+            profile_exists = False
+            is_approved = False
+            is_rejected = False
+            rejection_reason = None
+            rejection_date = None
+        
+        # Determine available roles
+        available_roles = ['customer']
+        if profile_exists and is_approved:
+            available_roles.append('vendor')
+        
+        return Response({
+            'success': True,
+            'token': token.key,
+            'user': UserSerializer(user).data,
+            'available_roles': available_roles,
+            'current_role': user.user_type,
+            'profile_exists': profile_exists,
+            'is_approved': is_approved,
+            'is_rejected': is_rejected if is_rejected is not None else False,
+            'rejection_reason': rejection_reason,
+            'rejection_date': rejection_date.isoformat() if rejection_date else None,
+            'message': 'Privacy policy agreed and login successful'
+        })
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def check_wallet_balance_api(request):
     """Check wallet balance and auto-disable if needed"""
@@ -2519,3 +2694,56 @@ def check_wallet_balance_api(request):
         return Response({'error': 'Vendor profile not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def validate_referral_code_api(request):
+    """Validate if a referral code exists and belongs to an approved vendor"""
+    referral_code = request.data.get('referral_code', '').strip().upper()
+    
+    if not referral_code:
+        return Response({
+            'valid': False,
+            'message': 'Referral code is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        referring_user = CustomUser.objects.get(referral_code=referral_code, user_type='vendor')
+        try:
+            referring_vendor = VendorProfile.objects.get(user=referring_user, is_approved=True)
+            return Response({
+                'valid': True,
+                'message': f'Valid referral code from {referring_vendor.business_name}',
+                'vendor_name': referring_vendor.business_name
+            })
+        except VendorProfile.DoesNotExist:
+            return Response({
+                'valid': False,
+                'message': 'Referral code belongs to an unapproved vendor'
+            })
+    except CustomUser.DoesNotExist:
+        return Response({
+            'valid': False,
+            'message': 'Invalid referral code'
+        })
+
+# Direct order accept/reject functions (backup for URL routing issues)
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def vendor_accept_order_direct(request, order_id):
+    """Direct vendor accept order function - backup for routing issues"""
+    print(f"🔥 DIRECT VENDOR ACCEPT ORDER CALLED - Order ID: {order_id}, User: {request.user}")
+    
+    # Import the function from order_views and call it
+    from .order_views import vendor_accept_order_api
+    return vendor_accept_order_api(request, order_id)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def vendor_reject_order_direct(request, order_id):
+    """Direct vendor reject order function - backup for routing issues"""
+    print(f"🔥 DIRECT VENDOR REJECT ORDER CALLED - Order ID: {order_id}, User: {request.user}")
+    
+    # Import the function from order_views and call it
+    from .order_views import vendor_reject_order_api
+    return vendor_reject_order_api(request, order_id)
