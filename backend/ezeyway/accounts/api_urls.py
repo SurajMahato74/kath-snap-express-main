@@ -149,4 +149,5 @@ urlpatterns = [
     
     # Referral API
     path('validate-referral-code/', api_views.validate_referral_code_api, name='api_validate_referral_code'),
+    path('generate-referral-code/', api_views.generate_referral_code_api, name='api_generate_referral_code'),
 ]

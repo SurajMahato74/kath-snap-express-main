@@ -2727,6 +2727,37 @@ def validate_referral_code_api(request):
             'message': 'Invalid referral code'
         })
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def generate_referral_code_api(request):
+    """Generate referral code for the current vendor user if they don't have one"""
+    try:
+        user = request.user
+        if user.user_type == 'vendor':
+            if not user.referral_code:
+                referral_code = user.generate_referral_code()
+                return Response({
+                    'success': True,
+                    'referral_code': referral_code,
+                    'message': 'Referral code generated successfully'
+                })
+            else:
+                return Response({
+                    'success': True,
+                    'referral_code': user.referral_code,
+                    'message': 'Referral code already exists'
+                })
+        else:
+            return Response({
+                'success': False,
+                'message': 'Only vendors can have referral codes'
+            }, status=status.HTTP_403_FORBIDDEN)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Failed to generate referral code: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # Direct order accept/reject functions (backup for URL routing issues)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
