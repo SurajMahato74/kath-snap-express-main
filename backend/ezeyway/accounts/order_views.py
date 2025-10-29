@@ -191,7 +191,7 @@ class VendorOrderListView(generics.ListAPIView):
     
     def get_queryset(self):
         try:
-            vendor_profile = VendorProfile.objects.get(user=self.request.user, is_approved=True)
+            vendor_profile = VendorProfile.objects.get(user=self.request.user)
             print(f"🔥 VendorOrderListView - User: {self.request.user.username}, Vendor ID: {vendor_profile.id}, Business: {vendor_profile.business_name}")
             
             # Show all orders for this vendor
