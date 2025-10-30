@@ -1765,6 +1765,41 @@ def get_subcategories_api(request, category_name):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
+def get_category_parameters_api(request, category_id):
+    """Get parameters for a specific category"""
+    try:
+        category = Category.objects.get(id=category_id, is_active=True)
+        parameters = CategoryParameter.objects.filter(category=category)
+        
+        parameters_data = []
+        for param in parameters:
+            param_data = {
+                'id': param.id,
+                'name': param.name,
+                'label': param.label,
+                'field_type': param.field_type,
+                'is_required': param.is_required,
+                'description': param.description,
+                'placeholder': param.placeholder,
+                'min_value': param.min_value,
+                'max_value': param.max_value,
+                'step': param.step,
+                'options': param.options.split(',') if param.options else []
+            }
+            parameters_data.append(param_data)
+            
+        return Response({
+            'success': True,
+            'parameters': parameters_data
+        })
+    except Category.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'Category not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
 def get_delivery_radius_api(request):
     # Get the first (smallest) delivery radius as default
     radius = DeliveryRadius.objects.first()

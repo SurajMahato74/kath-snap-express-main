@@ -47,6 +47,7 @@ urlpatterns = [
     # Categories API
     path('categories/', api_views.get_categories_api, name='api_get_categories'),
     path('categories/<str:category_name>/subcategories/', api_views.get_subcategories_api, name='api_get_subcategories'),
+    path('categories/<int:category_id>/parameters/', api_views.get_category_parameters_api, name='api_get_category_parameters'),
     
     # Delivery Radius API
     path('delivery-radius/', api_views.get_delivery_radius_api, name='api_get_delivery_radius'),
