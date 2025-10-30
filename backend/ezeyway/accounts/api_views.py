@@ -1796,6 +1796,14 @@ def get_category_parameters_api(request, category_id):
         
         parameters_data = []
         for param in parameters:
+            # Normalize options: some records store options as list (JSONField), others as comma-separated string
+            if isinstance(param.options, list):
+                options_list = param.options
+            elif isinstance(param.options, str):
+                options_list = [opt.strip() for opt in param.options.split(',') if opt.strip()]
+            else:
+                options_list = []
+
             param_data = {
                 'id': param.id,
                 'name': param.name,
@@ -1807,7 +1815,7 @@ def get_category_parameters_api(request, category_id):
                 'min_value': param.min_value,
                 'max_value': param.max_value,
                 'step': param.step,
-                'options': param.options.split(',') if param.options else []
+                'options': options_list
             }
             parameters_data.append(param_data)
             
@@ -1832,6 +1840,14 @@ def get_subcategory_parameters_api(request, subcategory_id):
 
         parameters_data = []
         for param in parameters:
+            # Normalize options: some records store options as list (JSONField), others as comma-separated string
+            if isinstance(param.options, list):
+                options_list = param.options
+            elif isinstance(param.options, str):
+                options_list = [opt.strip() for opt in param.options.split(',') if opt.strip()]
+            else:
+                options_list = []
+
             param_data = {
                 'id': param.id,
                 'name': param.name,
@@ -1843,7 +1859,7 @@ def get_subcategory_parameters_api(request, subcategory_id):
                 'min_value': param.min_value,
                 'max_value': param.max_value,
                 'step': param.step,
-                'options': param.options.split(',') if param.options else []
+                'options': options_list
             }
             parameters_data.append(param_data)
 
