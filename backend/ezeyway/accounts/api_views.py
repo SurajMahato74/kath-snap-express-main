@@ -1764,6 +1764,28 @@ def get_subcategories_api(request, category_name):
             'subcategories': []
         })
 
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_subcategories_detailed_api(request, category_name):
+    """Return detailed subcategory objects (id, name) for a category"""
+    try:
+        category = Category.objects.get(name=category_name, is_active=True)
+        subcategories = category.subcategories.filter(is_active=True).order_by('display_order', 'name')
+        subcats = []
+        for sub in subcategories:
+            subcats.append({
+                'id': sub.id,
+                'name': sub.name
+            })
+        return Response({
+            'subcategories': subcats
+        })
+    except Category.DoesNotExist:
+        return Response({
+            'subcategories': []
+        })
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def get_category_parameters_api(request, category_id):
