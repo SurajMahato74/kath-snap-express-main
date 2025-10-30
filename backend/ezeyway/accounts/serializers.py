@@ -588,7 +588,10 @@ class CustomerProductSerializer(serializers.ModelSerializer):
             'custom_delivery_fee_enabled', 'custom_delivery_fee', 'dynamic_fields', 'images',
             'vendor_name', 'vendor_id', 'vendor_latitude', 'vendor_longitude', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at']
+        # Include total_sold (computed property on Product) so customer-facing
+        # product list/search endpoints return the sold count used by the frontend.
+        fields.append('total_sold')
+        read_only_fields = ['id', 'created_at', 'total_sold']
 
 class UserFavoriteSerializer(serializers.ModelSerializer):
     product = CustomerProductSerializer(read_only=True)
