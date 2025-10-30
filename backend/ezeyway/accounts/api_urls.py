@@ -48,6 +48,9 @@ urlpatterns = [
     path('categories/', api_views.get_categories_api, name='api_get_categories'),
     path('categories/<str:category_name>/subcategories/', api_views.get_subcategories_api, name='api_get_subcategories'),
     path('categories/<int:category_id>/parameters/', api_views.get_category_parameters_api, name='api_get_category_parameters'),
+    path('subcategories/<int:subcategory_id>/parameters/', api_views.get_subcategory_parameters_api, name='api_get_subcategory_parameters'),
+    # Compatibility: old frontend called /api/accounts/categories/parameters/?target_id=..&target_type=..
+    path('accounts/categories/parameters/', api_views.get_category_parameters_compat_api, name='api_get_category_parameters_compat'),
     
     # Delivery Radius API
     path('delivery-radius/', api_views.get_delivery_radius_api, name='api_get_delivery_radius'),

@@ -17,6 +17,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 logger = logging.getLogger(__name__)
 from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider
+from .parameter_models import CategoryParameter, SubCategoryParameter
 from datetime import timedelta
 from .complete_onboarding_view import complete_vendor_onboarding
 from .serializers import (
@@ -1797,6 +1798,81 @@ def get_category_parameters_api(request, category_id):
             'success': False,
             'error': 'Category not found'
         }, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_subcategory_parameters_api(request, subcategory_id):
+    """Get parameters for a specific subcategory"""
+    try:
+        subcategory = SubCategory.objects.get(id=subcategory_id)
+        parameters = SubCategoryParameter.objects.filter(subcategory=subcategory)
+
+        parameters_data = []
+        for param in parameters:
+            param_data = {
+                'id': param.id,
+                'name': param.name,
+                'label': param.label,
+                'field_type': param.field_type,
+                'is_required': param.is_required,
+                'description': param.description,
+                'placeholder': param.placeholder,
+                'min_value': param.min_value,
+                'max_value': param.max_value,
+                'step': param.step,
+                'options': param.options.split(',') if param.options else []
+            }
+            parameters_data.append(param_data)
+
+        return Response({
+            'success': True,
+            'parameters': parameters_data
+        })
+    except SubCategory.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'Subcategory not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_category_parameters_compat_api(request):
+    """Compatibility endpoint for old frontend requests using query params:
+    /api/accounts/categories/parameters/?target_id=3&target_type=category
+    """
+    target_id = request.GET.get('target_id')
+    target_type = request.GET.get('target_type')
+
+    if not target_id or not target_type:
+        return Response({'error': 'Missing parameters'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        if target_type == 'category':
+            parameters = CategoryParameter.objects.filter(category_id=target_id, is_active=True).order_by('display_order', 'name')
+        elif target_type == 'subcategory':
+            parameters = SubCategoryParameter.objects.filter(subcategory_id=target_id, is_active=True).order_by('display_order', 'name')
+        else:
+            return Response({'error': 'Invalid target type'}, status=status.HTTP_400_BAD_REQUEST)
+
+        params_data = []
+        for param in parameters:
+            params_data.append({
+                'id': param.id,
+                'name': param.name,
+                'label': param.label,
+                'field_type': param.field_type,
+                'is_required': param.is_required,
+                'options': param.options,
+                'placeholder': param.placeholder,
+                'description': param.description,
+                'display_order': param.display_order
+            })
+
+        return Response({'parameters': params_data})
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
