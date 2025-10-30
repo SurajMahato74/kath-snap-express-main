@@ -305,15 +305,22 @@ class Product(models.Model):
     
     @property
     def total_sold(self):
-        """Calculate total sold from confirmed orders"""
+        """Calculate total sold from completed orders.
+
+        Include orders that are in final/fulfilled statuses so the
+        displayed 'sold' count reflects delivered/completed sales.
+        """
         try:
             from .order_models import OrderItem
+            # Count items from orders which are in completed statuses
+            completed_statuses = ['confirmed', 'delivered']
             total = OrderItem.objects.filter(
                 product=self,
-                order__status='confirmed'
+                order__status__in=completed_statuses
             ).aggregate(total=models.Sum('quantity'))['total'] or 0
             return total
-        except:
+        except Exception:
+            # If anything goes wrong (import error or DB issue), return 0
             return 0
 
 def product_image_upload_path(instance, filename):
