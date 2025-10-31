@@ -991,18 +991,18 @@ def get_product_reviews_api(request, product_id):
             order__status='delivered'
         ).select_related('order', 'customer')
         
-        # Calculate aggregate metrics
+        # Calculate aggregate metrics using actual OrderReview fields
         aggregate_data = reviews.aggregate(
-            avg_rating=Avg('rating'),
+            avg_rating=Avg('overall_rating'),
             total_reviews=Count('id'),
-            avg_quality=Avg('quality_rating'),
-            avg_value=Avg('value_rating'),
-            avg_service=Avg('service_rating')
+            avg_quality=Avg('food_quality_rating'),
+            avg_value=Avg('delivery_rating'),
+            avg_service=Avg('vendor_rating')
         )
-        
+
         # Get recent reviews
         recent_reviews = reviews.order_by('-created_at')[:5]
-        
+
         # Format the response
         response_data = {
             'product_id': product_id,
@@ -1015,13 +1015,13 @@ def get_product_reviews_api(request, product_id):
                 'average_service': float(aggregate_data['avg_service'] or 0)
             },
             'recent_reviews': [{
-                'rating': review.rating,
-                'comment': review.comment,
+                'rating': getattr(review, 'overall_rating', None),
+                'comment': getattr(review, 'review_text', ''),
                 'customer_name': review.customer.get_full_name() or review.customer.username,
                 'created_at': review.created_at,
-                'quality_rating': review.quality_rating,
-                'value_rating': review.value_rating,
-                'service_rating': review.service_rating
+                'quality_rating': getattr(review, 'food_quality_rating', None),
+                'value_rating': getattr(review, 'delivery_rating', None),
+                'service_rating': getattr(review, 'vendor_rating', None)
             } for review in recent_reviews]
         }
         
@@ -1038,6 +1038,7 @@ def get_product_reviews_api(request, product_id):
 def get_vendor_reviews_api(request, vendor_id):
     """Get aggregate reviews for a vendor's products"""
     try:
+        from django.db.models import Avg, Count
         vendor_profile = get_object_or_404(VendorProfile, id=vendor_id)
         
         # Get all reviews for this vendor's products
@@ -1046,18 +1047,18 @@ def get_vendor_reviews_api(request, vendor_id):
             order__status='delivered'
         ).select_related('order', 'customer')
         
-        # Calculate aggregate metrics
+        # Calculate aggregate metrics using actual OrderReview fields
         aggregate_data = reviews.aggregate(
-            avg_rating=Avg('rating'),
+            avg_rating=Avg('overall_rating'),
             total_reviews=Count('id'),
-            avg_quality=Avg('quality_rating'),
-            avg_value=Avg('value_rating'),
-            avg_service=Avg('service_rating')
+            avg_quality=Avg('food_quality_rating'),
+            avg_value=Avg('delivery_rating'),
+            avg_service=Avg('vendor_rating')
         )
-        
+
         # Get recent reviews
         recent_reviews = reviews.order_by('-created_at')[:5]
-        
+
         # Format the response
         response_data = {
             'vendor_id': vendor_id,
@@ -1070,14 +1071,14 @@ def get_vendor_reviews_api(request, vendor_id):
                 'average_service': float(aggregate_data['avg_service'] or 0)
             },
             'recent_reviews': [{
-                'rating': review.rating,
-                'comment': review.comment,
+                'rating': getattr(review, 'overall_rating', None),
+                'comment': getattr(review, 'review_text', ''),
                 'customer_name': review.customer.get_full_name() or review.customer.username,
                 'created_at': review.created_at,
-                'quality_rating': review.quality_rating,
-                'value_rating': review.value_rating,
-                'service_rating': review.service_rating,
-                'product_name': review.order.items.first().product.name if review.order.items.exists() else None
+                'quality_rating': getattr(review, 'food_quality_rating', None),
+                'value_rating': getattr(review, 'delivery_rating', None),
+                'service_rating': getattr(review, 'vendor_rating', None),
+                'product_name': None
             } for review in recent_reviews]
         }
         
