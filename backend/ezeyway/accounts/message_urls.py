@@ -4,6 +4,7 @@ from . import message_views
 urlpatterns = [
     # Conversation APIs
     path('conversations/', message_views.ConversationListView.as_view(), name='conversation_list'),
+    path('conversations/create/', message_views.create_support_conversation_api, name='create_support_conversation'),
     path('conversations/<int:pk>/', message_views.ConversationDetailView.as_view(), name='conversation_detail'),
     path('conversations/<int:conversation_id>/messages/', message_views.MessageListView.as_view(), name='message_list'),
     path('conversations/user/<int:user_id>/', message_views.get_or_create_conversation_api, name='get_or_create_conversation'),

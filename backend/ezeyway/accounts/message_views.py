@@ -58,6 +58,43 @@ class MessageListView(generics.ListAPIView):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def send_message_api(request):
+    # Handle special case for superadmin recipient_type
+    if request.data.get('recipient_type') == 'superadmin':
+        # Find the superadmin user (ezeywaya)
+        try:
+            superadmin_user = CustomUser.objects.get(username='ezeywaya')
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'Superadmin not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if conversation already exists
+        conversation = Conversation.objects.filter(
+            participants=request.user
+        ).filter(participants=superadmin_user).first()
+
+        if not conversation:
+            conversation = Conversation.objects.create()
+            conversation.participants.add(request.user, superadmin_user)
+
+        # Create message
+        message = Message.objects.create(
+            conversation=conversation,
+            sender=request.user,
+            message_type='text',
+            content=request.data.get('message', '')
+        )
+
+        # Mark as read by sender
+        MessageRead.objects.create(message=message, user=request.user)
+
+        # Update conversation timestamp
+        conversation.save()
+
+        return Response({
+            'message': MessageSerializer(message, context={'request': request}).data,
+            'conversation': ConversationSerializer(conversation, context={'request': request}).data
+        }, status=status.HTTP_201_CREATED)
+
+    # Original send_message_api logic
     serializer = SendMessageSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -310,3 +347,40 @@ def message_image_api(request, message_id):
             'height': message.image_height
         } if message.image_width and message.image_height else None
     })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def create_support_conversation_api(request):
+    """Create a conversation with superadmin for support"""
+    try:
+        superadmin_user = CustomUser.objects.get(username='ezeywaya')
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'Support not available'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if conversation already exists
+    conversation = Conversation.objects.filter(
+        participants=request.user
+    ).filter(participants=superadmin_user).first()
+
+    if not conversation:
+        conversation = Conversation.objects.create()
+        conversation.participants.add(request.user, superadmin_user)
+
+    # If message is provided, create it
+    message_content = request.data.get('message')
+    if message_content:
+        message = Message.objects.create(
+            conversation=conversation,
+            sender=request.user,
+            message_type='text',
+            content=message_content
+        )
+        # Mark as read by sender
+        MessageRead.objects.create(message=message, user=request.user)
+        # Update conversation timestamp
+        conversation.save()
+
+    return Response({
+        'conversation_id': conversation.id,
+        'message': 'Support conversation created' if not message_content else 'Message sent to support'
+    }, status=status.HTTP_201_CREATED)
