@@ -34,6 +34,8 @@ urlpatterns = [
     
     # Review URLs
     path('orders/<int:order_id>/review/', order_views.create_review_api, name='create_review'),
+    path('products/<int:product_id>/reviews/', order_views.get_product_reviews_api, name='get_product_reviews'),
+    path('vendors/<int:vendor_id>/reviews/', order_views.get_vendor_reviews_api, name='get_vendor_reviews'),
     
     # Refund URLs
     path('orders/<int:order_id>/refund/', order_views.request_refund_api, name='request_refund'),

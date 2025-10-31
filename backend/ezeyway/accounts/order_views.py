@@ -974,6 +974,121 @@ def debug_vendor_orders_api(request):
     except VendorProfile.DoesNotExist:
         return Response({'error': 'No vendor profile found'}, status=status.HTTP_404_NOT_FOUND)
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_product_reviews_api(request, product_id):
+    """Get aggregate reviews for a specific product"""
+    try:
+        from .models import Product, OrderItem
+        from django.db.models import Avg, Count
+        
+        # Get the product
+        product = get_object_or_404(Product, id=product_id)
+        
+        # Get all orders containing this product that have reviews
+        reviews = OrderReview.objects.filter(
+            order__items__product=product,
+            order__status='delivered'
+        ).select_related('order', 'customer')
+        
+        # Calculate aggregate metrics
+        aggregate_data = reviews.aggregate(
+            avg_rating=Avg('rating'),
+            total_reviews=Count('id'),
+            avg_quality=Avg('quality_rating'),
+            avg_value=Avg('value_rating'),
+            avg_service=Avg('service_rating')
+        )
+        
+        # Get recent reviews
+        recent_reviews = reviews.order_by('-created_at')[:5]
+        
+        # Format the response
+        response_data = {
+            'product_id': product_id,
+            'product_name': product.name,
+            'aggregate': {
+                'average_rating': float(aggregate_data['avg_rating'] or 0),
+                'total_reviews': aggregate_data['total_reviews'] or 0,
+                'average_quality': float(aggregate_data['avg_quality'] or 0),
+                'average_value': float(aggregate_data['avg_value'] or 0),
+                'average_service': float(aggregate_data['avg_service'] or 0)
+            },
+            'recent_reviews': [{
+                'rating': review.rating,
+                'comment': review.comment,
+                'customer_name': review.customer.get_full_name() or review.customer.username,
+                'created_at': review.created_at,
+                'quality_rating': review.quality_rating,
+                'value_rating': review.value_rating,
+                'service_rating': review.service_rating
+            } for review in recent_reviews]
+        }
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to get product reviews: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_vendor_reviews_api(request, vendor_id):
+    """Get aggregate reviews for a vendor's products"""
+    try:
+        vendor_profile = get_object_or_404(VendorProfile, id=vendor_id)
+        
+        # Get all reviews for this vendor's products
+        reviews = OrderReview.objects.filter(
+            order__vendor=vendor_profile,
+            order__status='delivered'
+        ).select_related('order', 'customer')
+        
+        # Calculate aggregate metrics
+        aggregate_data = reviews.aggregate(
+            avg_rating=Avg('rating'),
+            total_reviews=Count('id'),
+            avg_quality=Avg('quality_rating'),
+            avg_value=Avg('value_rating'),
+            avg_service=Avg('service_rating')
+        )
+        
+        # Get recent reviews
+        recent_reviews = reviews.order_by('-created_at')[:5]
+        
+        # Format the response
+        response_data = {
+            'vendor_id': vendor_id,
+            'vendor_name': vendor_profile.business_name,
+            'aggregate': {
+                'average_rating': float(aggregate_data['avg_rating'] or 0),
+                'total_reviews': aggregate_data['total_reviews'] or 0,
+                'average_quality': float(aggregate_data['avg_quality'] or 0),
+                'average_value': float(aggregate_data['avg_value'] or 0),
+                'average_service': float(aggregate_data['avg_service'] or 0)
+            },
+            'recent_reviews': [{
+                'rating': review.rating,
+                'comment': review.comment,
+                'customer_name': review.customer.get_full_name() or review.customer.username,
+                'created_at': review.created_at,
+                'quality_rating': review.quality_rating,
+                'value_rating': review.value_rating,
+                'service_rating': review.service_rating,
+                'product_name': review.order.items.first().product.name if review.order.items.exists() else None
+            } for review in recent_reviews]
+        }
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to get vendor reviews: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 # Debug endpoint
 @api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
