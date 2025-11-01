@@ -574,11 +574,11 @@ def admin_process_refund_api(request, refund_id):
         # Check if user has permission (admin or vendor of the order)
         has_permission = request.user.is_superuser
         try:
-            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            vendor_profile = VendorProfile.objects.get(user=request.user)
             has_permission = refund.order.vendor == vendor_profile
         except VendorProfile.DoesNotExist:
             pass
-        
+
         if not has_permission:
             return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     except OrderRefund.DoesNotExist:
