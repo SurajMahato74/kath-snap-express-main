@@ -14,7 +14,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
         model = OrderItem
         fields = [
             'id', 'product', 'product_details', 'quantity', 'unit_price', 
-            'total_price', 'product_name', 'product_description', 'vendor_name'
+            'total_price', 'delivery_fee', 'product_name', 'product_description', 
+            'vendor_name', 'product_selections'
         ]
         read_only_fields = ['id', 'total_price', 'product_name', 'product_description', 'vendor_name']
 
@@ -208,14 +209,18 @@ class CreateOrderSerializer(serializers.Serializer):
                 }
             
             quantity = int(item_data['quantity'])
-            unit_price = product.price
+            unit_price = item_data.get('unit_price', product.price)
             total_price = unit_price * quantity
             
             vendor_items[vendor_id]['items'].append({
                 'product': product,
                 'quantity': quantity,
                 'unit_price': unit_price,
-                'total_price': total_price
+                'total_price': total_price,
+                'delivery_fee': item_data.get('delivery_fee', 0),
+                'product_selections': item_data.get('product_selections', {}),
+                'product_name': item_data.get('product_name', product.name),
+                'vendor_name': item_data.get('vendor_name', product.vendor.business_name)
             })
         
         # Create separate orders for each vendor
@@ -242,7 +247,7 @@ class CreateOrderSerializer(serializers.Serializer):
                 delivery_latitude=validated_data['delivery_latitude'],
                 delivery_longitude=validated_data['delivery_longitude'],
                 delivery_instructions=validated_data.get('delivery_instructions', ''),
-                delivery_distance=validated_data.get('delivery_distance', 0),
+                delivery_distance=validated_data.get('delivery_distance', 0.0),
                 payment_method=validated_data['payment_method'],
                 subtotal=subtotal,
                 delivery_fee=delivery_fee,

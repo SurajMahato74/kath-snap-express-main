@@ -115,11 +115,15 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Product snapshot at time of order
     product_name = models.CharField(max_length=200)
     product_description = models.TextField(blank=True, null=True)
     vendor_name = models.CharField(max_length=200)
+    
+    # Product variant selections (color, size, etc.)
+    product_selections = models.JSONField(default=dict, blank=True)
     
     def __str__(self):
         return f"{self.product_name} x {self.quantity}"
