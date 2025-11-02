@@ -48,6 +48,9 @@ urlpatterns = [
     path('admin/orders/stats/', order_views.admin_order_stats_api, name='admin_order_stats'),
     path('admin/refunds/<int:refund_id>/process/', order_views.admin_process_refund_api, name='admin_process_refund'),
     
+    # Vendor Refund URLs
+    path('vendor/refunds/<int:refund_id>/process/', order_views.vendor_process_refund_api, name='vendor_process_refund'),
+    
     # Delivery URLs
     path('delivery/riders/', order_views.DeliveryRiderListView.as_view(), name='delivery_riders'),
     path('delivery/<int:delivery_id>/location/', order_views.update_delivery_location_api, name='update_delivery_location'),
