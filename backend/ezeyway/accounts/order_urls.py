@@ -42,6 +42,8 @@ urlpatterns = [
     path('orders/<int:order_id>/return/', order_views.request_return_api, name='request_return'),
     path('refunds/<int:refund_id>/appeal/', order_views.appeal_refund_api, name='appeal_refund'),
     path('refunds/<int:refund_id>/upload-document/', order_views.upload_refund_document_api, name='upload_refund_document'),
+    path('refunds/<int:refund_id>/mark-received/', customer_order_views.mark_refund_received_api, name='mark_refund_received'),
+    path('refunds/<int:refund_id>/contact-support/', customer_order_views.contact_support_refund_api, name='contact_support_refund')
     
     # Admin Order URLs
     path('admin/orders/', order_views.AdminOrderListView.as_view(), name='admin_orders'),

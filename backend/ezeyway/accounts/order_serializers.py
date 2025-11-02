@@ -88,11 +88,12 @@ class OrderRefundSerializer(serializers.ModelSerializer):
             'admin_notes', 'evidence_photos', 'refund_method', 'esewa_number',
             'khalti_number', 'bank_account_name', 'bank_account_number', 'bank_branch',
             'requested_at', 'approved_at', 'processed_at', 'completed_at', 'appeal_at',
-            'processed_by', 'processed_by_name'
+            'processed_by', 'processed_by_name', 'customer_received_refund', 
+            'customer_received_at', 'support_contacted', 'support_contacted_at', 'support_notes'
         ]
         read_only_fields = [
             'id', 'customer', 'requested_at', 'approved_at', 'processed_at', 
-            'completed_at', 'appeal_at', 'processed_by'
+            'completed_at', 'appeal_at', 'processed_by', 'customer_received_at', 'support_contacted_at'
         ]
 
 class OrderNotificationSerializer(serializers.ModelSerializer):

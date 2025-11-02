@@ -436,7 +436,7 @@ def request_return_api(request, order_id):
         # Check if return already exists
         existing_return = OrderRefund.objects.filter(
             order=order, 
-            status__in=['requested', 'approved', 'appeal']
+            status__in=['requested', 'approved', 'rejected', 'appeal', 'processed', 'completed']
         ).first()
         
         if existing_return:
@@ -447,6 +447,11 @@ def request_return_api(request, order_id):
         data = request.data.copy()
         data['refund_type'] = 'full'
         
+        # Calculate refund amount excluding delivery charges
+        # Only refund the bill amount (subtotal + tax), not delivery fee
+        refund_amount = float(order.subtotal) + float(order.tax_amount or 0)
+        data['requested_amount'] = refund_amount
+        
         serializer = OrderRefundSerializer(data=data)
         if serializer.is_valid():
             refund = serializer.save(order=order, customer=request.user)
@@ -456,6 +461,9 @@ def request_return_api(request, order_id):
             
             return Response({
                 'message': 'Return request submitted successfully',
+                'note': 'Delivery charges are not included in refund amount',
+                'refund_amount': refund_amount,
+                'excluded_delivery_fee': float(order.delivery_fee or 0),
                 'refund': OrderRefundSerializer(refund).data
             }, status=status.HTTP_201_CREATED)
         

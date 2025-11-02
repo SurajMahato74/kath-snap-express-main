@@ -333,6 +333,13 @@ class OrderRefund(models.Model):
     # Processing info
     processed_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='processed_refunds')
     
+    # Customer actions after completion
+    customer_received_refund = models.BooleanField(default=False)
+    customer_received_at = models.DateTimeField(blank=True, null=True)
+    support_contacted = models.BooleanField(default=False)
+    support_contacted_at = models.DateTimeField(blank=True, null=True)
+    support_notes = models.TextField(blank=True, null=True)
+    
     def __str__(self):
         return f"Refund for Order #{self.order.order_number} - ₹{self.requested_amount}"
 
