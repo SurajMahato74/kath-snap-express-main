@@ -154,6 +154,105 @@ def get_parameters_public(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
+def get_category_parameter(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    parameter_id = request.GET.get('parameter_id')
+    target_type = request.GET.get('target_type')
+    
+    if not parameter_id or not target_type:
+        return JsonResponse({'error': 'Missing parameters'}, status=400)
+    
+    try:
+        if target_type == 'category':
+            parameter = CategoryParameter.objects.get(id=parameter_id)
+        elif target_type == 'subcategory':
+            parameter = SubCategoryParameter.objects.get(id=parameter_id)
+        else:
+            return JsonResponse({'error': 'Invalid target type'}, status=400)
+        
+        return JsonResponse({
+            'id': parameter.id,
+            'name': parameter.name,
+            'label': parameter.label,
+            'field_type': parameter.field_type,
+            'is_required': parameter.is_required,
+            'options': parameter.options,
+            'placeholder': parameter.placeholder,
+            'description': parameter.description,
+            'display_order': parameter.display_order,
+            'min_value': parameter.min_value,
+            'max_value': parameter.max_value,
+            'step': parameter.step
+        })
+    
+    except (CategoryParameter.DoesNotExist, SubCategoryParameter.DoesNotExist):
+        return JsonResponse({'error': 'Parameter not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def update_category_parameter(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        parameter_id = request.POST.get('parameter_id')
+        target_type = request.POST.get('target_type')
+        param_name = request.POST.get('param_name')
+        param_label = request.POST.get('param_label')
+        param_type = request.POST.get('param_type')
+        param_placeholder = request.POST.get('param_placeholder')
+        param_order = request.POST.get('param_order', 0)
+        param_required = request.POST.get('param_required') == 'on'
+        param_options = request.POST.get('param_options')
+        param_min = request.POST.get('param_min')
+        param_max = request.POST.get('param_max')
+        param_step = request.POST.get('param_step')
+        
+        if not all([parameter_id, target_type, param_name, param_label, param_type]):
+            return JsonResponse({'error': 'Missing required fields'}, status=400)
+        
+        # Parse options if provided
+        options = []
+        if param_options:
+            try:
+                options = json.loads(param_options)
+            except json.JSONDecodeError:
+                options = [opt.strip() for opt in param_options.split('\n') if opt.strip()]
+        
+        # Get and update parameter
+        if target_type == 'category':
+            parameter = CategoryParameter.objects.get(id=parameter_id)
+        elif target_type == 'subcategory':
+            parameter = SubCategoryParameter.objects.get(id=parameter_id)
+        else:
+            return JsonResponse({'error': 'Invalid target type'}, status=400)
+        
+        parameter.name = param_name
+        parameter.label = param_label
+        parameter.field_type = param_type
+        parameter.is_required = param_required
+        parameter.options = options
+        parameter.placeholder = param_placeholder
+        parameter.display_order = int(param_order)
+        parameter.min_value = float(param_min) if param_min else None
+        parameter.max_value = float(param_max) if param_max else None
+        parameter.step = float(param_step) if param_step else None
+        parameter.save()
+        
+        return JsonResponse({'success': True, 'message': 'Parameter updated successfully'})
+    
+    except (CategoryParameter.DoesNotExist, SubCategoryParameter.DoesNotExist):
+        return JsonResponse({'error': 'Parameter not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
 def delete_category_parameter(request):
     if not request.user.is_superuser:
         return JsonResponse({'error': 'Access denied'}, status=403)

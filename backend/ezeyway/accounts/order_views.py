@@ -567,27 +567,19 @@ class AdminOrderListView(generics.ListAPIView):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_process_refund_api(request, refund_id):
-    """Process a refund request (admin or vendor)"""
+    """Process a refund request (admin only)"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+
     try:
         refund = OrderRefund.objects.get(id=refund_id)
-        
-        # Check if user has permission (admin or vendor of the order)
-        has_permission = request.user.is_superuser
-        try:
-            vendor_profile = VendorProfile.objects.get(user=request.user)
-            has_permission = refund.order.vendor == vendor_profile
-        except VendorProfile.DoesNotExist:
-            pass
-
-        if not has_permission:
-            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
     except OrderRefund.DoesNotExist:
         return Response({'error': 'Refund not found'}, status=status.HTTP_404_NOT_FOUND)
-    
+
     action = request.data.get('action')  # 'approve' or 'reject'
     admin_notes = request.data.get('admin_notes', '')
     approved_amount = request.data.get('approved_amount')
-    
+
     if action == 'approve':
         refund.status = 'approved'
         refund.approved_at = timezone.now()
@@ -595,16 +587,16 @@ def admin_process_refund_api(request, refund_id):
         refund.admin_notes = admin_notes
         refund.processed_by = request.user
         refund.save()
-        
+
         message = 'Refund approved'
-        
+
     elif action == 'process':
         refund.status = 'processed'
         refund.processed_at = timezone.now()
         refund.admin_notes = admin_notes
         refund.processed_by = request.user
         refund.save()
-        
+
         # Create payment transaction for refund
         PaymentTransaction.objects.create(
             order=refund.order,
@@ -614,35 +606,117 @@ def admin_process_refund_api(request, refund_id):
             payment_method=refund.order.payment_method,
             notes=f'Refund processed: {admin_notes}'
         )
-        
+
         message = 'Refund processed - money transferred'
-        
+
     elif action == 'complete':
         refund.status = 'completed'
         refund.completed_at = timezone.now()
         refund.admin_notes = admin_notes
         refund.save()
-        
+
         # Update order payment status
         refund.order.payment_status = 'refunded'
         refund.order.save()
-        
+
         message = 'Refund completed'
-        
+
     elif action == 'reject':
         refund.status = 'rejected'
         refund.admin_notes = admin_notes
         refund.processed_by = request.user
         refund.save()
-        
+
         message = 'Refund request rejected'
-    
+
     else:
         return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     # Send refund notification
     send_refund_notification(refund, action)
-        
+
+    return Response({
+        'message': message,
+        'refund': OrderRefundSerializer(refund).data
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def vendor_process_refund_api(request, refund_id):
+    """Process a refund request (vendor only)"""
+    try:
+        refund = OrderRefund.objects.get(id=refund_id)
+
+        # Check if user is vendor of the order
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            if refund.order.vendor != vendor_profile:
+                return Response({'error': 'Access denied - not your order'}, status=status.HTTP_403_FORBIDDEN)
+        except VendorProfile.DoesNotExist:
+            return Response({'error': 'Vendor profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+    except OrderRefund.DoesNotExist:
+        return Response({'error': 'Refund not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    action = request.data.get('action')  # 'approve' or 'reject'
+    admin_notes = request.data.get('admin_notes', '')
+    approved_amount = request.data.get('approved_amount')
+
+    if action == 'approve':
+        refund.status = 'approved'
+        refund.approved_at = timezone.now()
+        refund.approved_amount = approved_amount or refund.requested_amount
+        refund.admin_notes = admin_notes
+        refund.processed_by = request.user
+        refund.save()
+
+        message = 'Refund approved'
+
+    elif action == 'process':
+        refund.status = 'processed'
+        refund.processed_at = timezone.now()
+        refund.admin_notes = admin_notes
+        refund.processed_by = request.user
+        refund.save()
+
+        # Create payment transaction for refund
+        PaymentTransaction.objects.create(
+            order=refund.order,
+            transaction_type='refund',
+            status='completed',
+            amount=refund.approved_amount or refund.requested_amount,
+            payment_method=refund.order.payment_method,
+            notes=f'Refund processed: {admin_notes}'
+        )
+
+        message = 'Refund processed - money transferred'
+
+    elif action == 'complete':
+        refund.status = 'completed'
+        refund.completed_at = timezone.now()
+        refund.admin_notes = admin_notes
+        refund.save()
+
+        # Update order payment status
+        refund.order.payment_status = 'refunded'
+        refund.order.save()
+
+        message = 'Refund completed'
+
+    elif action == 'reject':
+        refund.status = 'rejected'
+        refund.admin_notes = admin_notes
+        refund.processed_by = request.user
+        refund.save()
+
+        message = 'Refund request rejected'
+
+    else:
+        return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Send refund notification
+    send_refund_notification(refund, action)
+
     return Response({
         'message': message,
         'refund': OrderRefundSerializer(refund).data

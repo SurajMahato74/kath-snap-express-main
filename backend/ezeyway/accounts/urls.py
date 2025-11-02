@@ -53,6 +53,8 @@ urlpatterns = [
     # Parameter Management AJAX endpoints
     path('superadmin/categories/get-parameters/', parameter_ajax_views.get_category_parameters, name='get_parameters'),
     path('superadmin/categories/add-parameter/', parameter_ajax_views.add_category_parameter, name='add_parameter'),
+    path('superadmin/categories/get-parameter/', parameter_ajax_views.get_category_parameter, name='get_parameter'),
+    path('superadmin/categories/update-parameter/', parameter_ajax_views.update_category_parameter, name='update_parameter'),
     path('superadmin/categories/delete-parameter/', parameter_ajax_views.delete_category_parameter, name='delete_parameter'),
     
     # Public parameter endpoints for vendors

@@ -663,9 +663,14 @@ function loadParameters(targetId, targetType) {
                                     ${param.placeholder ? `<br><small class="text-muted">Placeholder: ${param.placeholder}</small>` : ''}
                                     ${param.options && param.options.length > 0 ? `<br><small class="text-muted">Options: ${param.options.join(', ')}</small>` : ''}
                                 </div>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteParameter(${param.id}, '${targetType}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary me-2" onclick="editParameter(${param.id}, '${targetType}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteParameter(${param.id}, '${targetType}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -726,6 +731,113 @@ function addParameter() {
         console.error('Error adding parameter:', error);
         alert('Error adding parameter. Please try again.');
     });
+}
+
+function editParameter(parameterId, targetType) {
+    // Fetch parameter data
+    fetch(`/accounts/superadmin/categories/get-parameter/?parameter_id=${parameterId}&target_type=${targetType}`)
+        .then(response => response.json())
+        .then(param => {
+            // Fill form with existing data
+            const form = document.getElementById('addParameterForm');
+            form.querySelector('[name="param_name"]').value = param.name;
+            form.querySelector('[name="param_label"]').value = param.label;
+            form.querySelector('[name="param_type"]').value = param.field_type;
+            form.querySelector('[name="param_placeholder"]').value = param.placeholder || '';
+            form.querySelector('[name="param_order"]').value = param.display_order;
+            form.querySelector('[name="param_required"]').checked = param.is_required;
+            form.querySelector('[name="param_min"]').value = param.min_value || '';
+            form.querySelector('[name="param_max"]').value = param.max_value || '';
+            form.querySelector('[name="param_step"]').value = param.step || '';
+            
+            if (param.options && param.options.length > 0) {
+                form.querySelector('[name="param_options"]').value = param.options.join('\n');
+            }
+            
+            // Show/hide sections based on field type
+            toggleOptions(form.querySelector('[name="param_type"]'));
+            
+            // Change button to update mode
+            const submitBtn = form.querySelector('button[type="button"]');
+            submitBtn.innerHTML = '<i class="fas fa-save me-1"></i>Update Parameter';
+            submitBtn.onclick = () => updateParameter(parameterId);
+            
+            // Add cancel button
+            if (!document.getElementById('cancelEditBtn')) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'btn btn-secondary ms-2';
+                cancelBtn.id = 'cancelEditBtn';
+                cancelBtn.innerHTML = 'Cancel';
+                cancelBtn.onclick = cancelEdit;
+                submitBtn.parentNode.appendChild(cancelBtn);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading parameter:', error);
+            alert('Error loading parameter data.');
+        });
+}
+
+function updateParameter(parameterId) {
+    const form = document.getElementById('addParameterForm');
+    const formData = new FormData(form);
+    
+    // Add parameter ID and action
+    formData.append('parameter_id', parameterId);
+    
+    // Convert options textarea to array
+    const optionsText = formData.get('param_options');
+    if (optionsText) {
+        const options = optionsText.split('\n').filter(opt => opt.trim() !== '');
+        formData.delete('param_options');
+        formData.append('param_options', JSON.stringify(options));
+    }
+    
+    fetch('/accounts/superadmin/categories/update-parameter/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            cancelEdit();
+            
+            // Reload parameters
+            const targetId = document.getElementById('param_target_id').value;
+            const targetType = document.getElementById('param_target_type').value;
+            loadParameters(targetId, targetType);
+            
+            alert('Parameter updated successfully!');
+        } else {
+            alert('Error updating parameter: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error updating parameter:', error);
+        alert('Error updating parameter. Please try again.');
+    });
+}
+
+function cancelEdit() {
+    const form = document.getElementById('addParameterForm');
+    form.reset();
+    document.getElementById('optionsSection').style.display = 'none';
+    document.getElementById('numberSection').style.display = 'none';
+    
+    // Reset button
+    const submitBtn = form.querySelector('button[type="button"]');
+    submitBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Add Parameter';
+    submitBtn.onclick = addParameter;
+    
+    // Remove cancel button
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    if (cancelBtn) {
+        cancelBtn.remove();
+    }
 }
 
 function deleteParameter(parameterId, targetType) {
