@@ -146,7 +146,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class CreateOrderSerializer(serializers.Serializer):
     # Order items
     items = serializers.ListField(
-        child=serializers.DictField(child=serializers.CharField()),
+        child=serializers.DictField(),
         write_only=True
     )
     
@@ -178,6 +178,12 @@ class CreateOrderSerializer(serializers.Serializer):
                     raise serializers.ValidationError("Quantity must be greater than 0")
                 if int(item['quantity']) > product.quantity:
                     raise serializers.ValidationError(f"Not enough stock for {product.name}")
+                    
+                # Validate product_selections if present
+                if 'product_selections' in item and item['product_selections']:
+                    if not isinstance(item['product_selections'], dict):
+                        raise serializers.ValidationError("Product selections must be a valid object")
+                        
             except Product.DoesNotExist:
                 raise serializers.ValidationError(f"Product with id {item['product_id']} not found")
             except ValueError:
