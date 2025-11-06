@@ -2923,7 +2923,55 @@ def vendor_accept_order_direct(request, order_id):
 def vendor_reject_order_direct(request, order_id):
     """Direct vendor reject order function - backup for routing issues"""
     print(f"🔥 DIRECT VENDOR REJECT ORDER CALLED - Order ID: {order_id}, User: {request.user}")
-    
+
     # Import the function from order_views and call it
     from .order_views import vendor_reject_order_api
     return vendor_reject_order_api(request, order_id)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def send_web_push_notification_api(request):
+    """Send web push notification for orders that works when browser is closed"""
+    try:
+        order_id = request.data.get('orderId')
+        order_number = request.data.get('orderNumber', 'Unknown')
+        amount = request.data.get('amount', '0')
+        title = request.data.get('title', f'New Order #{order_number}')
+        body = request.data.get('body', f'Order received - ₹{amount}')
+        icon = request.data.get('icon')
+        badge = request.data.get('badge')
+
+        if not order_id:
+            return Response({'error': 'orderId is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get vendor profile and FCM token
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+        except VendorProfile.DoesNotExist:
+            return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
+
+        if not vendor_profile.fcm_token:
+            return Response({'error': 'No FCM token found. Please restart the app.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Send web push notification
+        from .fcm_service import fcm_service
+        success = fcm_service.send_order_web_push_notification(vendor_profile.fcm_token, {
+            'orderId': str(order_id),
+            'orderNumber': order_number,
+            'amount': str(amount)
+        })
+
+        if success:
+            return Response({
+                'success': True,
+                'message': 'Web push notification sent successfully'
+            })
+        else:
+            return Response({
+                'error': 'Failed to send web push notification'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except Exception as e:
+        return Response({
+            'error': f'Failed to send web push notification: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -130,7 +130,10 @@ urlpatterns = [
     
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='api_register_fcm_token'),
-    
+
+    # Web Push Notifications
+    path('send-web-push-notification/', api_views.send_web_push_notification_api, name='api_send_web_push_notification'),
+
     # Token refresh
     path('refresh-token/', refresh_token_api, name='api_refresh_token'),
     
