@@ -1,0 +1,20 @@
+[Unit]
+Description=Daphne instance to serve ezeyway Django application with WebSocket support
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/ezeyway/kath-snap-express-main/backend/ezeyway
+Environment="PATH=/opt/ezeyway/kath-snap-express-main/backend/ezeyway/venv/bin"
+ExecStart=/opt/ezeyway/kath-snap-express-main/backend/ezeyway/venv/bin/daphne \
+          --bind 0.0.0.0:8003 \
+          --access-logfile /var/log/daphne/ezeyway_access.log \
+          --error-logfile /var/log/daphne/ezeyway_error.log \
+          --log-level info \
+          ezeyway.asgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
