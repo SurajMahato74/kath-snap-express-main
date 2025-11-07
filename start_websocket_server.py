@@ -1,73 +1,73 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
-WebSocket server startup script for Django Channels
-This ensures proper ASGI configuration for WebSocket support
+Start Django server with proper WebSocket support using Daphne
 """
-
 import os
 import sys
 import subprocess
-import time
+import importlib.util
+
+def check_daphne():
+    """Check if Daphne is installed"""
+    try:
+        import daphne
+        return True
+    except ImportError:
+        return False
+
+def install_daphne():
+    """Install Daphne if not available"""
+    print("Daphne not found. Installing...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "daphne"])
+        print("✅ Daphne installed successfully")
+        return True
+    except subprocess.CalledProcessError:
+        print("❌ Failed to install Daphne")
+        return False
 
 def main():
-    """Start the Django server with WebSocket support"""
-    
-    # Add the project directory to Python path
-    project_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.join(project_dir, 'backend', 'ezeyway')
-    
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
-    
-    print("🚀 Starting Django server with WebSocket support...")
-    print(f"📁 Backend directory: {backend_dir}")
-    
-    # Set Django settings
+    # Set Django settings module
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezeyway.settings')
     
-    # Change to backend directory
-    os.chdir(backend_dir)
+    # Change to the Django project directory
+    project_dir = os.path.join(os.path.dirname(__file__), 'backend', 'ezeyway')
+    os.chdir(project_dir)
+    
+    print("🚀 Starting Django server with WebSocket support...")
+    print("=" * 60)
+    print("📡 Server: http://localhost:8000")
+    print("🔌 WebSocket: ws://localhost:8000/ws/notifications/")
+    print("💬 Messages: ws://localhost:8000/ws/messages/")
+    print("📞 Calls: ws://localhost:8000/ws/calls/")
+    print("=" * 60)
+    
+    # Check if Daphne is available
+    if not check_daphne():
+        print("⚠️ Daphne not found. Installing...")
+        if not install_daphne():
+            print("❌ Could not install Daphne. Please install manually:")
+            print("   pip install daphne")
+            return False
     
     try:
-        # Test Django setup
-        print("🔍 Testing Django configuration...")
-        import django
-        django.setup()
-        
-        # Test Channels configuration
-        from django.conf import settings
-        if hasattr(settings, 'CHANNEL_LAYERS'):
-            print("✅ Django Channels is configured")
-            print(f"📡 Channel layer: {settings.CHANNEL_LAYERS}")
-        else:
-            print("❌ Django Channels not properly configured")
-            return
-        
-        # Check if ASGI application exists
-        try:
-            from ezeyway.asgi import application
-            print("✅ ASGI application loaded successfully")
-        except ImportError as e:
-            print(f"❌ ASGI application import failed: {e}")
-            return
-        
-        print("🌐 Starting server with daphne (ASGI server for Channels)...")
-        print("🔗 WebSocket endpoint: ws://localhost:8000/ws/notifications/")
-        print("Press Ctrl+C to stop the server")
-        
-        # Start server with daphne (recommended for Channels)
+        # Use Daphne (ASGI server) for WebSocket support
+        print("🔥 Starting Daphne ASGI server...")
         subprocess.run([
             sys.executable, '-m', 'daphne', 
-            '-b', '0.0.0.0', 
-            '-p', '8000', 
+            '-b', '0.0.0.0',
+            '-p', '8000',
             'ezeyway.asgi:application'
-        ])
+        ], check=True)
         
+    except subprocess.CalledProcessError:
+        print("❌ Error: Failed to start server")
+        return False
     except KeyboardInterrupt:
-        print("\n🛑 Server stopped by user")
-    except Exception as e:
-        print(f"💥 Error starting server: {e}")
-        sys.exit(1)
+        print("\n✅ Server stopped by user")
+        return True
+    
+    return False
 
 if __name__ == '__main__':
     main()
