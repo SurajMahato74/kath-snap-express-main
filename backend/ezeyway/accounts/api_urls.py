@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from . import api_views
 from . import order_views
 
@@ -17,13 +17,19 @@ urlpatterns = [
     path('orders/vendor/pending/', order_views.vendor_pending_orders_api, name='vendor_pending_orders'),
     path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='accept_order'),
     path('orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='reject_order'),
-    
+
     # Vendor Status
     path('vendor/toggle-status/', api_views.toggle_vendor_status_api, name='toggle_vendor_status'),
     path('vendor/status/', api_views.vendor_status_api, name='vendor_status'),
-    
+
     # Notifications
     path('notifications/', api_views.notification_status_api, name='notifications'),
+
+    # Messaging
+    path('messaging/', include('accounts.message_urls')),
+
+    # Vendor Notifications
+    path('vendor-notifications/', include('accounts.notification_urls')),
 
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
