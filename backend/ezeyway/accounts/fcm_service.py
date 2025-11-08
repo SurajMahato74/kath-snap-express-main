@@ -50,17 +50,10 @@ class FCMService:
             if not service_account_path:
                 cwd = os.getcwd()
                 base_paths = [
-                    # Production server paths
-                    '/opt/ezeyway/kath-snap-express-main/backend/ezeyway/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
-                    '/opt/ezeyway/kath-snap-express-main/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
-                    '/opt/ezeyway/secrets/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
-                    # Development paths (relative to current workspace)
-                    os.path.join(cwd, 'ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'),
-                    os.path.join(cwd, '..', 'ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'),
-                    os.path.join(cwd, 'backend', 'ezeyway', 'ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'),
-                    os.path.join(cwd, '..', 'backend', 'ezeyway', 'ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json'),
-                    # Absolute path to workspace back directory
-                    'c:/Users/suraj/OneDrive/Desktop/BRANDWAVE/ezy_app/back/ezeyway-2f869-firebase-adminsdk-fbsvc-d8638b05a4.json',
+                    '/opt/ezeyway/secrets/ezeyway-firebase-adminsdk-new.json',
+                    '/opt/ezeyway/kath-snap-express-main/backend/ezeyway/ezeyway-firebase-adminsdk-new.json',
+                    os.path.join(cwd, 'ezeyway-firebase-adminsdk-new.json'),
+                    os.path.join(cwd, 'backend', 'ezeyway', 'ezeyway-firebase-adminsdk-new.json'),
                 ]
 
                 found_path = None
