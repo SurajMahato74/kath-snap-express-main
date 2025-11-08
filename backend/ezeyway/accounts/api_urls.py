@@ -14,9 +14,7 @@ urlpatterns = [
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
 
     # Order Management
-    path('orders/vendor/pending/', order_views.vendor_pending_orders_api, name='vendor_pending_orders'),
-    path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='accept_order'),
-    path('orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='reject_order'),
+    path('orders/', include('accounts.order_urls')),
 
     # Vendor Status
     path('vendor/toggle-status/', api_views.toggle_vendor_status_api, name='toggle_vendor_status'),
