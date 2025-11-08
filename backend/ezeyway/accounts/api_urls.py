@@ -23,7 +23,12 @@ urlpatterns = [
     
     # Notifications
     path('notifications/', api_views.notification_status_api, name='notifications'),
-    
+
+    # Categories and Products
+    path('categories/', api_views.categories_api, name='categories'),
+    path('sliders/', api_views.sliders_api, name='sliders'),
+    path('search/products/', api_views.search_products_api, name='search_products'),
+
     # Test endpoints
     path('test/', api_views.test_api, name='test'),
     path('health/', api_views.health_check, name='health'),

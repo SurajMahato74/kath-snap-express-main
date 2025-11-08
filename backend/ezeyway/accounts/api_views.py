@@ -2396,6 +2396,7 @@ def vendor_notifications_api(request):
         return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @csrf_exempt
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -2975,3 +2976,201 @@ def send_web_push_notification_api(request):
         return Response({
             'error': f'Failed to send web push notification: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Missing API endpoints that frontend is calling
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def categories_api(request):
+    """Get all active categories"""
+    try:
+        categories = Category.objects.filter(is_active=True).order_by('display_order', 'name')
+        serializer = CategorySerializer(categories, many=True, context={'request': request})
+        return Response({
+            'success': True,
+            'categories': serializer.data
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def sliders_api(request):
+    """Get sliders based on user type and current date/time"""
+    from .models import Slider
+
+    # Get user type from request (authenticated users) or query param
+    user_type = None
+    if request.user.is_authenticated:
+        user_type = request.user.user_type
+    else:
+        # For non-authenticated users, default to customer
+        user_type = 'customer'
+
+    # Allow override via query parameter for testing
+    requested_type = request.GET.get('user_type')
+    if requested_type in ['customer', 'vendor']:
+        user_type = requested_type
+
+    # Get current time for date filtering
+    now = timezone.now()
+
+    # Filter by date range only
+    queryset = Slider.objects.filter(
+        Q(start_date__isnull=True) | Q(start_date__lte=now)
+    ).filter(
+        Q(end_date__isnull=True) | Q(end_date__gte=now)
+    )
+
+    # Order by display order and creation date
+    queryset = queryset.order_by('display_order', 'created_at')
+
+    # Serialize the data
+    sliders_data = []
+    for slider in queryset:
+        slider_data = {
+            'id': slider.id,
+            'title': slider.title,
+            'description': slider.description,
+            'image_url': request.build_absolute_uri(slider.image.url) if slider.image else None,
+            'link_url': slider.link_url,
+            'visibility': slider.visibility,
+            'display_order': slider.display_order,
+            'start_date': slider.start_date.isoformat() if slider.start_date else None,
+            'end_date': slider.end_date.isoformat() if slider.end_date else None,
+            'created_at': slider.created_at.isoformat()
+        }
+        sliders_data.append(slider_data)
+
+    return Response({
+        'success': True,
+        'sliders': sliders_data,
+        'user_type': user_type,
+        'count': len(sliders_data)
+    })
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def search_products_api(request):
+    """Search products with location-based filtering"""
+    print("\nPRODUCT SEARCH API DEBUG - Starting query")
+    print(f"Query params: {dict(request.query_params)}")
+
+    # Get current time and day for vendor availability check
+    current_time = timezone.now().time()
+    current_day = timezone.now().strftime('%A').lower()
+    current_date = timezone.now().date()
+
+    # Initial filter with vendor online status
+    queryset = Product.objects.filter(
+        status='active',
+        vendor__is_approved=True
+    ).select_related('vendor').prefetch_related('images')
+
+    # Filter for online vendors only
+    online_vendors = []
+    for product in queryset:
+        vendor = product.vendor
+
+        # Check if vendor has status override for today
+        if vendor.status_override and vendor.status_override_date == current_date:
+            if vendor.is_active:
+                online_vendors.append(product.id)
+            continue
+
+        # Check business hours for current day
+        day_open = getattr(vendor, f'{current_day}_open')
+        day_close = getattr(vendor, f'{current_day}_close')
+        day_closed = getattr(vendor, f'{current_day}_closed')
+
+        # Vendor is online if not closed and current time is within business hours
+        if not day_closed and day_open and day_close and day_open <= current_time < day_close:
+            online_vendors.append(product.id)
+
+    queryset = queryset.filter(id__in=online_vendors)
+
+    initial_count = queryset.count()
+    print(f"Initial products (active, approved, online vendors): {initial_count}")
+
+    # Search query
+    search = request.query_params.get('search', '')
+    if search:
+        print(f"Applying search filter: '{search}'")
+        queryset = queryset.filter(
+            Q(name__icontains=search) |
+            Q(description__icontains=search) |
+            Q(category__icontains=search) |
+            Q(subcategory__icontains=search) |
+            Q(tags__icontains=search) |
+            Q(vendor__business_name__icontains=search)
+        )
+        search_count = queryset.count()
+        print(f"After search filter: {search_count} products")
+
+    # Location-based filtering
+    user_lat = request.query_params.get('latitude')
+    user_lon = request.query_params.get('longitude')
+
+    if user_lat and user_lon:
+        try:
+            user_lat = float(user_lat)
+            user_lon = float(user_lon)
+            print(f"User location: ({user_lat}, {user_lon})")
+
+            # Filter products by vendor delivery radius
+            filtered_products = []
+            total_checked = 0
+            within_radius = 0
+
+            for product in queryset:
+                vendor = product.vendor
+                total_checked += 1
+
+                if vendor.latitude and vendor.longitude and vendor.delivery_radius:
+                    distance = calculate_distance(
+                        user_lat, user_lon,
+                        vendor.latitude, vendor.longitude
+                    )
+                    print(f"Vendor '{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
+
+                    if distance <= vendor.delivery_radius:
+                        filtered_products.append(product.id)
+                        within_radius += 1
+                        print(f"  INCLUDED: Product '{product.name}'")
+                    else:
+                        print(f"  EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
+                else:
+                    print(f"Vendor '{vendor.business_name}': Missing location/radius data")
+
+            print(f"Location filtering: {within_radius}/{total_checked} products within delivery radius")
+            queryset = queryset.filter(id__in=filtered_products)
+        except (ValueError, TypeError) as e:
+            print(f"Location parsing error: {e}")
+    else:
+        print("No user location provided - skipping distance filtering")
+
+    final_count = queryset.count()
+    print(f"Final result: {final_count} products")
+    print("PRODUCT SEARCH API DEBUG - Complete\n")
+
+    # Pagination
+    page = int(request.query_params.get('page', 1))
+    page_size = int(request.query_params.get('page_size', 20))
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    paginated_queryset = queryset[start_index:end_index]
+
+    # Serialize results
+    from .serializers import CustomerProductSerializer
+    serializer = CustomerProductSerializer(paginated_queryset, many=True, context={'request': request})
+
+    return Response({
+        'success': True,
+        'results': serializer.data,
+        'count': final_count,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (final_count + page_size - 1) // page_size
+    })
