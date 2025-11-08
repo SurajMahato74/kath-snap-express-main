@@ -31,6 +31,13 @@ urlpatterns = [
     # Vendor Notifications
     path('vendor-notifications/', include('accounts.notification_urls')),
 
+    # Cart Management
+    path('cart/', api_views.get_cart_api, name='get_cart'),
+    path('cart/add/', api_views.add_to_cart_api, name='add_to_cart'),
+    path('cart/item/<int:item_id>/update/', api_views.update_cart_item_api, name='update_cart_item'),
+    path('cart/item/<int:item_id>/remove/', api_views.remove_from_cart_api, name='remove_from_cart'),
+    path('cart/clear/', api_views.clear_cart_api, name='clear_cart'),
+
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
     path('sliders/', api_views.get_sliders_api, name='sliders'),
