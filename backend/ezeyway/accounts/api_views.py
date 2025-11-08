@@ -2995,61 +2995,6 @@ def categories_api(request):
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@api_view(['GET'])
-@permission_classes([permissions.AllowAny])
-def sliders_api(request):
-    """Get sliders based on user type and current date/time"""
-    from .models import Slider
-
-    # Get user type from request (authenticated users) or query param
-    user_type = None
-    if request.user.is_authenticated:
-        user_type = request.user.user_type
-    else:
-        # For non-authenticated users, default to customer
-        user_type = 'customer'
-
-    # Allow override via query parameter for testing
-    requested_type = request.GET.get('user_type')
-    if requested_type in ['customer', 'vendor']:
-        user_type = requested_type
-
-    # Get current time for date filtering
-    now = timezone.now()
-
-    # Filter by date range only
-    queryset = Slider.objects.filter(
-        Q(start_date__isnull=True) | Q(start_date__lte=now)
-    ).filter(
-        Q(end_date__isnull=True) | Q(end_date__gte=now)
-    )
-
-    # Order by display order and creation date
-    queryset = queryset.order_by('display_order', 'created_at')
-
-    # Serialize the data
-    sliders_data = []
-    for slider in queryset:
-        slider_data = {
-            'id': slider.id,
-            'title': slider.title,
-            'description': slider.description,
-            'image_url': request.build_absolute_uri(slider.image.url) if slider.image else None,
-            'link_url': slider.link_url,
-            'visibility': slider.visibility,
-            'display_order': slider.display_order,
-            'start_date': slider.start_date.isoformat() if slider.start_date else None,
-            'end_date': slider.end_date.isoformat() if slider.end_date else None,
-            'created_at': slider.created_at.isoformat()
-        }
-        sliders_data.append(slider_data)
-
-    return Response({
-        'success': True,
-        'sliders': sliders_data,
-        'user_type': user_type,
-        'count': len(sliders_data)
-    })
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])

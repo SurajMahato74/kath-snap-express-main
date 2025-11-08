@@ -26,7 +26,7 @@ urlpatterns = [
 
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
-    path('sliders/', api_views.sliders_api, name='sliders'),
+    path('sliders/', api_views.get_sliders_api, name='sliders'),
     path('search/products/', api_views.search_products_api, name='search_products'),
 
     # Test endpoints
