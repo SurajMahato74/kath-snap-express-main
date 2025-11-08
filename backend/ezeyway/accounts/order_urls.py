@@ -3,11 +3,11 @@ from . import order_views, customer_order_views
 
 urlpatterns = [
     # Customer Order URLs
-    path('orders/', order_views.CustomerOrderListView.as_view(), name='customer_orders'),
-    path('orders/<int:pk>/', order_views.CustomerOrderDetailView.as_view(), name='customer_order_detail'),
-    path('orders/create/', order_views.create_order_api, name='create_order'),
-    path('orders/<int:order_id>/cancel/', order_views.cancel_order_api, name='cancel_order'),
-    path('orders/<int:order_id>/status/', customer_order_views.customer_update_order_status_api, name='customer_update_order_status'),
+    path('', order_views.CustomerOrderListView.as_view(), name='customer_orders'),
+    path('<int:pk>/', order_views.CustomerOrderDetailView.as_view(), name='customer_order_detail'),
+    path('create/', order_views.create_order_api, name='create_order'),
+    path('<int:order_id>/cancel/', order_views.cancel_order_api, name='cancel_order'),
+    path('<int:order_id>/status/', customer_order_views.customer_update_order_status_api, name='customer_update_order_status'),
     
     # Vendor Order URLs
     path('vendor/orders/', order_views.VendorOrderListView.as_view(), name='vendor_orders'),
