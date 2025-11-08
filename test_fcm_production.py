@@ -10,14 +10,15 @@ import django
 from datetime import datetime
 
 # Add the backend directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
+backend_path = os.path.join(os.path.dirname(__file__), 'backend', 'ezeyway')
+sys.path.insert(0, backend_path)
 
 # Set up Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezeyway.settings')
 django.setup()
 
-from backend.ezeyway.accounts.fcm_service import fcm_service
-from backend.ezeyway.accounts.models import VendorProfile
+from accounts.fcm_service import fcm_service
+from accounts.models import VendorProfile
 
 def test_fcm_production():
     """Test FCM notifications in production"""
