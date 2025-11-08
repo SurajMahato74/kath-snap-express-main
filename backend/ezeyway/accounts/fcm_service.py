@@ -6,11 +6,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Import enums for correct priority/visibility
-from firebase_admin.messaging import (
-    AndroidNotificationPriority,
-    AndroidNotificationVisibility,
-)
+# Import enums for correct priority/visibility (handle import errors gracefully)
+try:
+    from firebase_admin.messaging import (
+        AndroidNotificationPriority,
+        AndroidNotificationVisibility,
+    )
+except ImportError:
+    # Fallback for older Firebase Admin SDK versions
+    AndroidNotificationPriority = type('AndroidNotificationPriority', (), {
+        'HIGH': 'high',
+        'MAX': 'max',
+        'DEFAULT': 'default'
+    })()
+    AndroidNotificationVisibility = type('AndroidNotificationVisibility', (), {
+        'PUBLIC': 'public',
+        'PRIVATE': 'private'
+    })()
 
 class FCMService:
     _instance = None
