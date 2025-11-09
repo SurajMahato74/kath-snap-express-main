@@ -35,6 +35,9 @@ urlpatterns = [
     # Vendor Wallet
     path('vendor-wallet/', api_views.vendor_wallet_api, name='vendor_wallet'),
 
+    # Vendor Orders (direct endpoint for frontend compatibility)
+    path('vendor/orders/', include('accounts.order_urls')),
+
     # Favorites
     path('favorites/', api_views.UserFavoriteListView.as_view(), name='favorites'),
     path('favorites/toggle/', api_views.toggle_favorite_api, name='toggle_favorite'),
