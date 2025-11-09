@@ -226,7 +226,9 @@ class VendorOrderListView(generics.ListAPIView):
             # Override to return all orders without pagination
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
-            print(f"🔥 VendorOrderListView returning {len(serializer.data)} orders for vendor")
+            print(f"🔥 VendorOrderListView returning {len(serializer.data)} orders RECEIVED by vendor")
+            for order in serializer.data[:3]:  # Log first 3 orders
+                print(f"🔥 Order {order['id']}: Customer={order.get('customer_details', {}).get('username', 'N/A')}, Status={order.get('status', 'N/A')}")
             return Response(serializer.data)
         except Exception as e:
             print(f"🔥 Error in VendorOrderListView: {str(e)}")
