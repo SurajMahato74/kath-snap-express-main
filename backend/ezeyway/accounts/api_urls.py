@@ -15,6 +15,8 @@ urlpatterns = [
 
     # Vendor Profiles
     path('vendor-profiles/', api_views.VendorProfileListCreateView.as_view(), name='vendor_profiles'),
+    path('vendor-profiles/<int:pk>/', api_views.VendorProfileDetailView.as_view(), name='vendor_profile_detail'),
+    path('vendor-profiles/<int:pk>/toggle-status/', api_views.vendor_toggle_status_api, name='vendor_toggle_status_detail'),
 
     # Order Management
     path('orders/', include('accounts.order_urls')),
