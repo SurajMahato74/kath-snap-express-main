@@ -13,6 +13,9 @@ urlpatterns = [
     path('vendor/orders/', order_views.VendorOrderListView.as_view(), name='vendor_orders'),
     path('vendor/orders/<int:order_id>/status/', order_views.update_order_status_api, name='update_order_status'),
     path('orders/vendor/pending/', order_views.vendor_pending_orders_api, name='vendor_pending_orders'),
+
+    # Additional vendor order endpoints for frontend compatibility
+    path('vendor/pending/', order_views.vendor_pending_orders_api, name='vendor_pending_orders_alt'),
     
     # Order Accept/Reject endpoints - CRITICAL: These must be accessible
     # Multiple patterns to ensure the endpoint is accessible
