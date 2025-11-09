@@ -68,7 +68,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
         'returned': 'Your order return has been processed.',
         'refunded': 'Your order refund has been processed.'
     }
-    
+
     vendor_messages = {
         'pending': f'New order #{order.order_number} received from {order.customer.username}.',
         'confirmed': f'Order #{order.order_number} has been confirmed.',
@@ -80,7 +80,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
         'returned': f'Order #{order.order_number} return has been processed.',
         'refunded': f'Order #{order.order_number} refund has been processed.'
     }
-    
+
     # Get notification titles
     titles = {
         'pending': 'Order Placed',
@@ -93,7 +93,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
         'returned': 'Order Returned',
         'refunded': 'Order Refunded'
     }
-    
+
     # Send notification to customer
     if new_status in customer_messages:
         create_order_notification(
@@ -104,7 +104,11 @@ def send_order_status_notifications(order, new_status, old_status=None):
             message=customer_messages[new_status],
             send_realtime=True
         )
-    
+
+        # Send FCM notification to customer for important status changes
+        if new_status in ['confirmed', 'cancelled']:
+            send_fcm_notification_to_customer(order, new_status)
+
     # Send notification to vendor (except for initial pending status)
     if new_status in vendor_messages and new_status != 'pending':
         create_order_notification(
@@ -115,7 +119,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
             message=vendor_messages[new_status],
             send_realtime=True
         )
-    
+
     # Special case: Send vendor notification for new orders (pending status) with AUTO-OPEN
     elif new_status == 'pending' and old_status is None:
         create_order_notification(
@@ -126,7 +130,7 @@ def send_order_status_notifications(order, new_status, old_status=None):
             message=vendor_messages['pending'],
             send_realtime=True
         )
-        
+
         # Send FCM auto-open message
         print(f"NOTIFICATION_UTILS: Processing new order {order.id}")
         print(f"Vendor: {order.vendor.business_name}")
@@ -135,12 +139,12 @@ def send_order_status_notifications(order, new_status, old_status=None):
             print(f"FCM token exists: {bool(order.vendor.fcm_token)}")
             if order.vendor.fcm_token:
                 print(f"FCM token: {order.vendor.fcm_token[:30]}...")
-        
+
         try:
             if hasattr(order.vendor, 'fcm_token') and order.vendor.fcm_token:
                 print(f"SENDING AUTO-OPEN FCM for order {order.id}")
                 from .firebase_init import send_data_only_message
-                
+
                 try:
                     # Get order items safely
                     order_items = ", ".join([f"{item.quantity}x {item.product.name}" for item in order.orderitem_set.all()[:3]])
@@ -148,12 +152,12 @@ def send_order_status_notifications(order, new_status, old_status=None):
                         order_items += "..."
                 except:
                     order_items = "Order items"
-                
+
                 try:
                     customer_name = order.customer.get_full_name() or order.customer.username
                 except:
                     customer_name = "Customer"
-                
+
                 fcm_data = {
                     "autoOpen": "true",
                     "orderId": str(order.id),
@@ -165,21 +169,21 @@ def send_order_status_notifications(order, new_status, old_status=None):
                     "action": "autoOpenOrder",
                     "forceOpen": "true"
                 }
-                
+
                 notification_data = {
                     "title": f"🔥 NEW ORDER #{order.order_number}",
                     "body": f"{customer_name} • ${order.total_amount} • {order_items}"
                 }
                 print(f"FCM Data: {fcm_data}")
-                
+
                 from .firebase_init import send_fcm_message
-                
+
                 success = send_fcm_message(
                     token=order.vendor.fcm_token,
                     data=fcm_data,
                     notification=notification_data
                 )
-                
+
                 if success:
                     print(f"SUCCESS: Auto-open FCM sent for order {order.id}")
                 else:
@@ -190,6 +194,62 @@ def send_order_status_notifications(order, new_status, old_status=None):
             print(f"EXCEPTION sending auto-open FCM: {e}")
             import traceback
             traceback.print_exc()
+
+
+def send_fcm_notification_to_customer(order, status):
+    """
+    Send FCM notification to customer for order acceptance/rejection
+    """
+    try:
+        # Check if customer has FCM token
+        if not hasattr(order.customer, 'fcm_token') or not order.customer.fcm_token:
+            print(f"No FCM token for customer {order.customer.username}")
+            return
+
+        print(f"SENDING FCM TO CUSTOMER: Order {order.id}, Status: {status}")
+
+        if status == 'confirmed':
+            title = f"✅ Order Confirmed - #{order.order_number}"
+            body = f"Your order has been accepted and is being prepared. Tap to view details."
+            action = "orderConfirmed"
+        elif status == 'cancelled':
+            title = f"❌ Order Cancelled - #{order.order_number}"
+            body = f"Your order has been cancelled by the vendor. Tap to view details."
+            action = "orderCancelled"
+        else:
+            return
+
+        fcm_data = {
+            "orderId": str(order.id),
+            "orderNumber": order.order_number,
+            "status": status,
+            "action": action,
+            "type": "order_status_update",
+            "click_action": "FLUTTER_NOTIFICATION_CLICK"
+        }
+
+        notification_data = {
+            "title": title,
+            "body": body
+        }
+
+        from .firebase_init import send_fcm_message
+
+        success = send_fcm_message(
+            token=order.customer.fcm_token,
+            data=fcm_data,
+            notification=notification_data
+        )
+
+        if success:
+            print(f"SUCCESS: FCM sent to customer for order {order.id} status {status}")
+        else:
+            print(f"FAILED: FCM failed to customer for order {order.id}")
+
+    except Exception as e:
+        print(f"EXCEPTION sending FCM to customer: {e}")
+        import traceback
+        traceback.print_exc()
 
 def send_payment_notification(order, payment_status):
     """
