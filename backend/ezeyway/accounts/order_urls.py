@@ -62,5 +62,5 @@ urlpatterns = [
     path('delivery/<int:delivery_id>/location/', order_views.update_delivery_location_api, name='update_delivery_location'),
 
     # Ship order endpoint
-    path('orders/<int:order_id>/ship/', order_views.ship_order_api, name='ship_order'),
+    path('vendor/orders/<int:order_id>/ship/', order_views.ship_order_api, name='ship_order'),
 ]
