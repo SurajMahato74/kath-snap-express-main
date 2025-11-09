@@ -32,11 +32,11 @@ urlpatterns = [
     path('vendor-profiles/<int:pk>/toggle-status/', api_views.vendor_toggle_status_api, name='vendor_toggle_status_detail'),
     path('complete-onboarding/', complete_onboarding_view.complete_vendor_onboarding, name='complete_onboarding'),
 
-    # Order Management
-    path('orders/', include('accounts.order_urls')),
-
     # Vendor Orders (direct endpoint for frontend compatibility) - MOVED UP
     path('vendor/orders/', include('accounts.order_urls')),
+
+    # Order Management
+    path('orders/', include('accounts.order_urls')),
 
     # Direct Order Accept/Reject endpoints (for frontend compatibility)
     path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='direct_vendor_accept_order'),
