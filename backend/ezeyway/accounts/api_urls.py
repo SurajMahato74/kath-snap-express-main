@@ -39,6 +39,9 @@ urlpatterns = [
     # Vendor Orders (direct endpoint for frontend compatibility)
     path('vendor/orders/', include('accounts.order_urls')),
 
+    # Web Push Notifications
+    path('send-web-push-notification/', api_views.send_web_push_notification_api, name='send_web_push_notification'),
+
     # Favorites
     path('favorites/', api_views.UserFavoriteListView.as_view(), name='favorites'),
     path('favorites/toggle/', api_views.toggle_favorite_api, name='toggle_favorite'),
@@ -56,6 +59,7 @@ urlpatterns = [
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
     path('products/', api_views.ProductListCreateView.as_view(), name='products'),
+    path('delivery-radius/', api_views.get_delivery_radius_api, name='delivery_radius'),
     path('sliders/', api_views.get_sliders_api, name='sliders'),
     path('search/products/', api_views.search_products_api, name='search_products'),
 
