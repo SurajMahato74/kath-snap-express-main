@@ -707,11 +707,11 @@ def vendor_process_refund_api(request, refund_id):
     except OrderRefund.DoesNotExist:
         return Response({'error': 'Refund not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    action = request.data.get('action')  # 'approve' or 'reject'
+    action = request.data.get('status')  # 'approved' or 'rejected'
     admin_notes = request.data.get('admin_notes', '')
     approved_amount = request.data.get('approved_amount')
 
-    if action == 'approve':
+    if action == 'approved':
         refund.status = 'approved'
         refund.approved_at = timezone.now()
         refund.approved_amount = approved_amount or refund.requested_amount
@@ -752,7 +752,7 @@ def vendor_process_refund_api(request, refund_id):
 
         message = 'Refund completed'
 
-    elif action == 'reject':
+    elif action == 'rejected':
         refund.status = 'rejected'
         refund.admin_notes = admin_notes
         refund.processed_by = request.user

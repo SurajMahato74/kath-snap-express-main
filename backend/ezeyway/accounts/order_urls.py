@@ -57,6 +57,7 @@ urlpatterns = [
     
     # Vendor Refund URLs
     path('vendor/refunds/<int:refund_id>/process/', order_views.vendor_process_refund_api, name='vendor_process_refund'),
+    path('vendor/refunds/<int:refund_id>/', order_views.vendor_process_refund_api, name='vendor_refund_detail'),
     
     # Delivery URLs
     path('delivery/riders/', order_views.DeliveryRiderListView.as_view(), name='delivery_riders'),
