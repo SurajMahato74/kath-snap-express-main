@@ -23,6 +23,9 @@ urlpatterns = [
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
 
+    # Role Switching
+    path('switch-role/', api_views.switch_role_api, name='switch_role'),
+
     # Vendor Profiles
     path('vendor-profiles/', api_views.VendorProfileListCreateView.as_view(), name='vendor_profiles'),
     path('vendor-profiles/<int:pk>/', api_views.VendorProfileDetailView.as_view(), name='vendor_profile_detail'),
