@@ -54,6 +54,7 @@ urlpatterns = [
 
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
+    path('products/', api_views.ProductListCreateView.as_view(), name='products'),
     path('sliders/', api_views.get_sliders_api, name='sliders'),
     path('search/products/', api_views.search_products_api, name='search_products'),
 
