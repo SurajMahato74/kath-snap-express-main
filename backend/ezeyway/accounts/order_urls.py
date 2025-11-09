@@ -44,7 +44,7 @@ urlpatterns = [
     
     # Refund URLs
     path('orders/<int:order_id>/refund/', order_views.request_refund_api, name='request_refund'),
-    path('orders/<int:order_id>/return/', order_views.request_return_api, name='request_return'),
+    path('<int:order_id>/return/', order_views.request_return_api, name='request_return'),
     path('refunds/<int:refund_id>/appeal/', order_views.appeal_refund_api, name='appeal_refund'),
     path('refunds/<int:refund_id>/upload-document/', order_views.upload_refund_document_api, name='upload_refund_document'),
     path('refunds/<int:refund_id>/mark-received/', customer_order_views.mark_refund_received_api, name='mark_refund_received'),
