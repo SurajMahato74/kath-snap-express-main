@@ -35,6 +35,9 @@ urlpatterns = [
     # Order Management
     path('orders/', include('accounts.order_urls')),
 
+    # Vendor Orders (direct endpoint for frontend compatibility) - MOVED UP
+    path('vendor/orders/', include('accounts.order_urls')),
+
     # Direct Order Accept/Reject endpoints (for frontend compatibility)
     path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='direct_vendor_accept_order'),
     path('orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='direct_vendor_reject_order'),
@@ -55,9 +58,6 @@ urlpatterns = [
     # Vendor Wallet
     path('vendor-wallet/', api_views.vendor_wallet_api, name='vendor_wallet'),
     path('wallet/transactions/', api_views.wallet_transactions_api, name='wallet_transactions'),
-
-    # Vendor Orders (direct endpoint for frontend compatibility)
-    path('vendor/orders/', include('accounts.order_urls')),
 
     # Web Push Notifications
     path('send-web-push-notification/', api_views.send_web_push_notification_api, name='send_web_push_notification'),
