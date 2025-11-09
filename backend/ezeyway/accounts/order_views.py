@@ -660,12 +660,41 @@ def admin_process_refund_api(request, refund_id):
         'refund': OrderRefundSerializer(refund).data
     })
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.AllowAny])
 def vendor_process_refund_api(request, refund_id):
     """Process a refund request (vendor only)"""
     try:
         refund = OrderRefund.objects.get(id=refund_id)
+
+        if request.method == 'GET':
+            # Return refund details for viewing
+            return Response({
+                'id': refund.id,
+                'status': refund.status,
+                'reason': refund.reason,
+                'customer_notes': refund.customer_notes,
+                'admin_notes': refund.admin_notes,
+                'requested_amount': refund.requested_amount,
+                'approved_amount': refund.approved_amount,
+                'refund_method': refund.refund_method,
+                'esewa_number': refund.esewa_number,
+                'khalti_number': refund.khalti_number,
+                'bank_account_name': refund.bank_account_name,
+                'bank_account_number': refund.bank_account_number,
+                'bank_branch': refund.bank_branch,
+                'evidence_photos': refund.evidence_photos,
+                'requested_at': refund.requested_at,
+                'approved_at': refund.approved_at,
+                'processed_at': refund.processed_at,
+                'completed_at': refund.completed_at,
+                'appeal_at': refund.appeal_at,
+                'customer_received_refund': refund.customer_received_refund,
+                'customer_received_at': refund.customer_received_at,
+                'support_contacted': refund.support_contacted,
+                'support_contacted_at': refund.support_contacted_at,
+                'support_notes': refund.support_notes,
+            })
 
         # Check if user is vendor of the order
         try:
