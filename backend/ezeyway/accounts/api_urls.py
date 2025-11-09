@@ -86,6 +86,10 @@ urlpatterns = [
     path('sliders/', api_views.get_sliders_api, name='sliders'),
     path('search/products/', api_views.search_products_api, name='search_products'),
 
+    # Admin Vendor Actions (for AJAX calls)
+    path('admin/vendors/<int:vendor_id>/approve/', api_views.admin_approve_vendor_api, name='api_admin_approve_vendor'),
+    path('admin/vendors/<int:vendor_id>/reject/', api_views.admin_reject_vendor_api, name='api_admin_reject_vendor'),
+
     # Test endpoints
     path('test/', api_views.test_api, name='test'),
     path('health/', api_views.health_check, name='health'),
