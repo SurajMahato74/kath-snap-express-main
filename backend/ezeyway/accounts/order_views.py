@@ -458,6 +458,31 @@ def update_delivery_location_api(request, delivery_id):
     except OrderDelivery.DoesNotExist:
         return Response({'error': 'Delivery not found'}, status=status.HTTP_404_NOT_FOUND)
 
+# Vendor Order Views
+class VendorOrderListView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        try:
+            vendor_profile = VendorProfile.objects.get(user=self.request.user, is_approved=True)
+            return Order.objects.filter(vendor=vendor_profile).order_by('-created_at')
+        except VendorProfile.DoesNotExist:
+            return Order.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception:
+            # Return empty page if pagination fails
+            return Response({
+                'count': 0,
+                'next': None,
+                'previous': None,
+                'results': []
+            })
+
 # Vendor-specific order endpoints
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
