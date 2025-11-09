@@ -82,6 +82,7 @@ urlpatterns = [
 
     # Review URLs (direct access for frontend compatibility)
     path('orders/<int:order_id>/review/', order_views.get_order_reviews_api, name='get_order_reviews_direct'),
+    path('orders/<int:order_id>/reviews/', order_views.get_order_reviews_api, name='get_order_reviews_plural'),
     path('products/<int:product_id>/reviews/', order_views.get_product_reviews_api, name='get_product_reviews_direct'),
     path('vendors/<int:vendor_id>/reviews/', order_views.get_vendor_reviews_api, name='get_vendor_reviews_direct'),
 
