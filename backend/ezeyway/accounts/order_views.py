@@ -1183,8 +1183,8 @@ def get_order_reviews_api(request, order_id):
 
             return Response(reviews_list)
         elif request.method == 'POST':
-            # Handle creating a new review
-            return create_review_api(request, order_id)
+            # Handle creating a new review - pass the request._request to maintain compatibility
+            return create_review_api(request._request, order_id)
 
     except Exception as e:
         return Response(
