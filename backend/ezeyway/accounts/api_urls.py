@@ -32,6 +32,9 @@ urlpatterns = [
     # Vendor Notifications
     path('vendor-notifications/', include('accounts.notification_urls')),
 
+    # Vendor Wallet
+    path('vendor-wallet/', api_views.vendor_wallet_api, name='vendor_wallet'),
+
     # Favorites
     path('favorites/', api_views.UserFavoriteListView.as_view(), name='favorites'),
     path('favorites/toggle/', api_views.toggle_favorite_api, name='toggle_favorite'),
