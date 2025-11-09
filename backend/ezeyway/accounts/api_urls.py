@@ -35,6 +35,10 @@ urlpatterns = [
     # Order Management
     path('orders/', include('accounts.order_urls')),
 
+    # Direct Order Accept/Reject endpoints (for frontend compatibility)
+    path('orders/<int:order_id>/accept/', order_views.vendor_accept_order_api, name='direct_vendor_accept_order'),
+    path('orders/<int:order_id>/reject/', order_views.vendor_reject_order_api, name='direct_vendor_reject_order'),
+
     # Vendor Status
     path('vendor/toggle-status/', api_views.toggle_vendor_status_api, name='toggle_vendor_status'),
     path('vendor/status/', api_views.vendor_status_api, name='vendor_status'),
