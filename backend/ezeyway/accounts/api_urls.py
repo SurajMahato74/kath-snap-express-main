@@ -1,6 +1,7 @@
 from django.urls import path, include
 from . import api_views
 from . import order_views
+from . import complete_onboarding_view
 
 urlpatterns = [
     # Authentication
@@ -26,6 +27,7 @@ urlpatterns = [
     path('vendor-profiles/', api_views.VendorProfileListCreateView.as_view(), name='vendor_profiles'),
     path('vendor-profiles/<int:pk>/', api_views.VendorProfileDetailView.as_view(), name='vendor_profile_detail'),
     path('vendor-profiles/<int:pk>/toggle-status/', api_views.vendor_toggle_status_api, name='vendor_toggle_status_detail'),
+    path('complete-onboarding/', complete_onboarding_view.complete_vendor_onboarding, name='complete_onboarding'),
 
     # Order Management
     path('orders/', include('accounts.order_urls')),
