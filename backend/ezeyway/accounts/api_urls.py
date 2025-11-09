@@ -35,7 +35,7 @@ urlpatterns = [
     # Vendor Orders (direct endpoint for frontend compatibility) - MOVED UP
     path('vendor/orders/', include('accounts.order_urls')),
 
-    # Order Management
+    # Order Management (customer orders)
     path('orders/', include('accounts.order_urls')),
 
     # Direct Order Accept/Reject endpoints (for frontend compatibility)
