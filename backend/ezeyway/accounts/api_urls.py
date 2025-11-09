@@ -63,6 +63,10 @@ urlpatterns = [
     path('search/vendors/', api_views.CustomerVendorSearchView.as_view(), name='search_vendors'),
     path('vendors/<int:vendor_id>/', api_views.CustomerVendorProfileView.as_view(), name='customer_vendor_profile'),
 
+    # Review URLs (direct access for frontend compatibility)
+    path('products/<int:product_id>/reviews/', order_views.get_product_reviews_api, name='get_product_reviews_direct'),
+    path('vendors/<int:vendor_id>/reviews/', order_views.get_vendor_reviews_api, name='get_vendor_reviews_direct'),
+
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
     path('categories/<str:category_name>/subcategories/', api_views.get_subcategories_api, name='get_subcategories'),
