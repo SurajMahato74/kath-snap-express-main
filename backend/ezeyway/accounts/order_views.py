@@ -193,21 +193,21 @@ class VendorOrderListView(generics.ListAPIView):
         try:
             vendor_profile = VendorProfile.objects.get(user=self.request.user)
             print(f"🔥 VendorOrderListView - User: {self.request.user.username}, Vendor ID: {vendor_profile.id}, Business: {vendor_profile.business_name}")
-            
-            # Show all orders for this vendor
+
+            # Show all orders RECEIVED by this vendor (where vendor is the vendor, not the customer)
             queryset = Order.objects.filter(
                 vendor=vendor_profile
             )
-            
-            print(f"🔥 Orders for vendor {vendor_profile.id}: {queryset.count()} orders")
+
+            print(f"🔥 Orders RECEIVED by vendor {vendor_profile.id}: {queryset.count()} orders")
             for order in queryset[:5]:  # Log first 5 orders
                 print(f"🔥 Order {order.id}: Vendor={order.vendor.business_name} (ID={order.vendor.id}), Customer={order.customer.username}")
-            
+
             # Filter by status
             status_filter = self.request.query_params.get('status')
             if status_filter:
                 queryset = queryset.filter(status=status_filter)
-            
+
             # Filter by date range
             date_from = self.request.query_params.get('date_from')
             date_to = self.request.query_params.get('date_to')
@@ -215,7 +215,7 @@ class VendorOrderListView(generics.ListAPIView):
                 queryset = queryset.filter(created_at__date__gte=date_from)
             if date_to:
                 queryset = queryset.filter(created_at__date__lte=date_to)
-            
+
             return queryset.order_by('-created_at')
         except VendorProfile.DoesNotExist:
             print(f"🔥 No vendor profile found for user: {self.request.user.username}")
@@ -226,8 +226,10 @@ class VendorOrderListView(generics.ListAPIView):
             # Override to return all orders without pagination
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
+            print(f"🔥 VendorOrderListView returning {len(serializer.data)} orders for vendor")
             return Response(serializer.data)
-        except Exception:
+        except Exception as e:
+            print(f"🔥 Error in VendorOrderListView: {str(e)}")
             # Return empty list if something fails
             return Response([])
 
