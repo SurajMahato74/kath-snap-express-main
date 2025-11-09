@@ -63,6 +63,7 @@ urlpatterns = [
     path('accounts/categories/parameters/', api_views.get_category_parameters_compat_api, name='accounts_category_parameters'),
     path('products/', api_views.ProductListCreateView.as_view(), name='products'),
     path('products/<int:pk>/', api_views.ProductDetailView.as_view(), name='product_detail'),
+    path('products/<int:product_id>/images/<int:image_id>/', api_views.delete_product_image, name='delete_product_image'),
     path('delivery-radius/', api_views.get_delivery_radius_api, name='delivery_radius'),
     path('sliders/', api_views.get_sliders_api, name='sliders'),
     path('search/products/', api_views.search_products_api, name='search_products'),
