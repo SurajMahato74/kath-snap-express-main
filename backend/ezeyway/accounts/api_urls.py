@@ -35,6 +35,7 @@ urlpatterns = [
     # Vendor Orders - Dedicated endpoint for vendor orders page
     path('vendor/orders/', order_views.VendorOrderListView.as_view(), name='vendor_orders_direct'),
     path('vendor/orders/<int:order_id>/ship/', order_views.update_order_status_api, name='vendor_ship_order'),
+    path('vendor/orders/<int:order_id>/update-status/', order_views.update_order_status_api, name='vendor_update_order_status'),
 
     # Order Management (customer orders)
     path('orders/', include('accounts.order_urls')),
