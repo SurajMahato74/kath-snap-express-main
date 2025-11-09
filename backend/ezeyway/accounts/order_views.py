@@ -183,6 +183,325 @@ def cancel_order_api(request, order_id):
     except Order.DoesNotExist:
         return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
 
+# Vendor Order Views
+class VendorOrderListView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # Disable pagination to return all orders
+    
+    def get_queryset(self):
+        try:
+            vendor_profile = VendorProfile.objects.get(user=self.request.user)
+            print(f"🔥 VendorOrderListView - User: {self.request.user.username}, Vendor ID: {vendor_profile.id}, Business: {vendor_profile.business_name}")
+
+            # Show all orders RECEIVED by this vendor (where vendor is the vendor, not the customer)
+            queryset = Order.objects.filter(
+                vendor=vendor_profile
+            )
+
+            print(f"🔥 Orders RECEIVED by vendor {vendor_profile.id}: {queryset.count()} orders")
+            for order in queryset[:5]:  # Log first 5 orders
+                print(f"🔥 Order {order.id}: Vendor={order.vendor.business_name} (ID={order.vendor.id}), Customer={order.customer.username}")
+
+            # Filter by status
+            status_filter = self.request.query_params.get('status')
+            if status_filter:
+                queryset = queryset.filter(status=status_filter)
+
+            # Filter by date range
+            date_from = self.request.query_params.get('date_from')
+            date_to = self.request.query_params.get('date_to')
+            if date_from:
+                queryset = queryset.filter(created_at__date__gte=date_from)
+            if date_to:
+                queryset = queryset.filter(created_at__date__lte=date_to)
+
+            return queryset.order_by('-created_at')
+        except VendorProfile.DoesNotExist:
+            print(f"🔥 No vendor profile found for user: {self.request.user.username}")
+            return Order.objects.none()
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            # Override to return all orders without pagination
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            print(f"🔥 VendorOrderListView returning {len(serializer.data)} orders RECEIVED by vendor")
+            for order in serializer.data[:3]:  # Log first 3 orders
+                print(f"🔥 Order {order['id']}: Customer={order.get('customer_details', {}).get('username', 'N/A')}, Status={order.get('status', 'N/A')}")
+            return Response(serializer.data)
+        except Exception as e:
+            print(f"🔥 Error in VendorOrderListView: {str(e)}")
+            # Return empty list if something fails
+            return Response([])
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def update_order_status_api(request, order_id):
+    """Update order status (vendor only)"""
+    print(f"🔥 UPDATE ORDER STATUS API - Order ID: {order_id}, User: {request.user}")
+    print(f"🔥 Request data: {request.data}")
+    
+    try:
+        # First check if order exists at all
+        try:
+            order_check = Order.objects.get(id=order_id)
+            print(f"🔥 Order {order_id} exists - Status: {order_check.status}, Vendor: {order_check.vendor.business_name}")
+        except Order.DoesNotExist:
+            print(f"🔥 Order {order_id} does not exist")
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check vendor profile
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user)
+            print(f"🔥 Vendor profile found: {vendor_profile.business_name}")
+        except VendorProfile.DoesNotExist:
+            print(f"🔥 No vendor profile for user: {request.user}")
+            return Response({'error': 'Vendor profile not found'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if order belongs to this vendor (allow superuser override or if user is the customer)
+        if order_check.vendor != vendor_profile and not request.user.is_superuser and order_check.customer != request.user:
+            print(f"🔥 Order belongs to different vendor: {order_check.vendor.business_name}")
+            return Response({'error': 'Order does not belong to your vendor profile'}, status=status.HTTP_403_FORBIDDEN)
+        
+        order = order_check
+        
+        # Handle the specific case for out_for_delivery status
+        if request.data.get('status') == 'out_for_delivery':
+            # Extract delivery information from request
+            delivery_boy_phone = request.data.get('delivery_boy_phone', '')
+            vehicle_number = request.data.get('vehicle_number', '')
+            vehicle_color = request.data.get('vehicle_color', '')
+            estimated_delivery_time = request.data.get('estimated_delivery_time', '10')
+            delivery_fee = request.data.get('delivery_fee', 0)
+            notes = request.data.get('notes', 'Order shipped with delivery details')
+            
+            # Update order status and delivery info
+            old_status = order.status
+            order.status = 'out_for_delivery'
+            order.out_for_delivery_at = timezone.now()
+            order.delivery_boy_phone = delivery_boy_phone
+            order.vehicle_number = vehicle_number
+            order.vehicle_color = vehicle_color
+            order.estimated_delivery_time = estimated_delivery_time
+            order.delivery_fee = delivery_fee
+            order.notes = notes
+            order.save()
+            
+            # Create status history
+            OrderStatusHistory.objects.create(
+                order=order,
+                status='out_for_delivery',
+                changed_by=request.user,
+                notes=notes
+            )
+            
+            # Send notifications
+            send_order_status_notifications(order, 'out_for_delivery', old_status)
+            
+            return Response({
+                'message': 'Order status updated to out for delivery',
+                'order': OrderSerializer(order, context={'request': request}).data
+            })
+        
+        # Handle other status updates using serializer
+        serializer = UpdateOrderStatusSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        new_status = serializer.validated_data['status']
+        notes = serializer.validated_data.get('notes', '')
+        
+        # Update order status
+        old_status = order.status
+        order.status = new_status
+        
+        # Update timestamps based on status
+        if new_status == 'confirmed':
+            order.confirmed_at = timezone.now()
+        elif new_status == 'preparing':
+            order.prepared_at = timezone.now()
+        elif new_status == 'delivered':
+            order.delivered_at = timezone.now()
+            if hasattr(order, 'delivery'):
+                order.delivery.status = 'delivered'
+                order.delivery.delivered_at = timezone.now()
+                order.delivery.save()
+        
+        order.save()
+        
+        # Create status history
+        OrderStatusHistory.objects.create(
+            order=order,
+            status=new_status,
+            changed_by=request.user,
+            notes=notes
+        )
+        
+        # Send comprehensive order status notifications
+        send_order_status_notifications(order, new_status, old_status)
+        
+        return Response({
+            'message': f'Order status updated to {new_status}',
+            'order': OrderSerializer(order, context={'request': request}).data
+        })
+        
+    except Exception as e:
+        print(f"🔥 Error in update_order_status_api: {str(e)}")
+        import traceback
+        print(f"🔥 Traceback: {traceback.format_exc()}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Review Views
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def create_review_api(request, order_id):
+    """Create or update a review for a delivered order"""
+    try:
+        order = Order.objects.get(id=order_id, customer=request.user)
+        
+        # Check if order is delivered
+        if order.status != 'delivered':
+            return Response({
+                'error': 'Order must be delivered to be reviewed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if review already exists
+        existing_review = getattr(order, 'review', None)
+        
+        if existing_review:
+            # Update existing review
+            serializer = OrderReviewSerializer(existing_review, data=request.data, partial=True)
+            if serializer.is_valid():
+                review = serializer.save()
+                return Response({
+                    'message': 'Review updated successfully',
+                    'review': OrderReviewSerializer(review).data
+                })
+        else:
+            # Create new review
+            serializer = OrderReviewSerializer(data=request.data)
+            if serializer.is_valid():
+                review = serializer.save(order=order, customer=request.user)
+                return Response({
+                    'message': 'Review created successfully',
+                    'review': OrderReviewSerializer(review).data
+                }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Order.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+# Refund Views
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def request_refund_api(request, order_id):
+    """Request a refund for an order"""
+    try:
+        order = Order.objects.get(id=order_id, customer=request.user)
+        
+        if order.status not in ['delivered', 'cancelled']:
+            return Response({
+                'error': 'Refund can only be requested for delivered or cancelled orders'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = OrderRefundSerializer(data=request.data)
+        if serializer.is_valid():
+            refund = serializer.save(order=order, customer=request.user)
+            
+            # Send refund notification
+            send_refund_notification(refund, 'requested')
+            
+            return Response({
+                'message': 'Refund request submitted successfully',
+                'refund': OrderRefundSerializer(refund).data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Order.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def request_return_api(request, order_id):
+    """Request a return for a delivered order"""
+    try:
+        order = Order.objects.get(id=order_id, customer=request.user)
+        
+        if order.status != 'delivered':
+            return Response({
+                'error': 'Returns can only be requested for delivered orders'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if return already exists
+        existing_return = OrderRefund.objects.filter(
+            order=order, 
+            status__in=['requested', 'approved', 'rejected', 'appeal', 'processed', 'completed']
+        ).first()
+        
+        if existing_return:
+            return Response({
+                'error': 'Return request already exists for this order'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = request.data.copy()
+        data['refund_type'] = 'full'
+        
+        # Calculate refund amount excluding delivery charges
+        # Only refund the bill amount (subtotal + tax), not delivery fee
+        refund_amount = float(order.subtotal) + float(order.tax_amount or 0)
+        data['requested_amount'] = refund_amount
+        
+        serializer = OrderRefundSerializer(data=data)
+        if serializer.is_valid():
+            refund = serializer.save(order=order, customer=request.user)
+            
+            # Send refund notification
+            send_refund_notification(refund, 'requested')
+            
+            return Response({
+                'message': 'Return request submitted successfully',
+                'note': 'Delivery charges are not included in refund amount',
+                'refund_amount': refund_amount,
+                'excluded_delivery_fee': float(order.delivery_fee or 0),
+                'refund': OrderRefundSerializer(refund).data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Order.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def appeal_refund_api(request, refund_id):
+    """Appeal a rejected refund request"""
+    try:
+        refund = OrderRefund.objects.get(id=refund_id, customer=request.user)
+        
+        if refund.status != 'rejected':
+            return Response({
+                'error': 'Can only appeal rejected refund requests'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update refund status to appeal
+        refund.status = 'appeal'
+        refund.appeal_at = timezone.now()
+        refund.customer_notes = request.data.get('customer_notes', refund.customer_notes)
+        refund.save()
+        
+        # Send refund notification for appeal
+        send_refund_notification(refund, 'appeal')
+        
+        return Response({
+            'message': 'Appeal submitted successfully',
+            'refund': OrderRefundSerializer(refund).data
+        })
+        
+    except OrderRefund.DoesNotExist:
+        return Response({'error': 'Refund not found'}, status=status.HTTP_404_NOT_FOUND)
 
 # Admin Views
 @api_view(['GET'])
@@ -896,72 +1215,16 @@ def check_order_exists_api(request, order_id):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def ship_order_api(request, order_id):
-    """Ship an order with delivery details (vendor only)"""
-    try:
-        vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
-        order = Order.objects.get(id=order_id, vendor=vendor_profile, status='confirmed')
-
-        # Validate required fields
-        delivery_boy_phone = request.data.get('delivery_boy_phone')
-        vehicle_number = request.data.get('vehicle_number')
-        vehicle_color = request.data.get('vehicle_color')
-        estimated_delivery_time = request.data.get('estimated_delivery_time')
-        delivery_fee = request.data.get('delivery_fee', 0)
-
-        if not delivery_boy_phone:
-            return Response({'error': 'Delivery boy phone is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not vehicle_number:
-            return Response({'error': 'Vehicle number is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not vehicle_color:
-            return Response({'error': 'Vehicle color is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not estimated_delivery_time:
-            return Response({'error': 'Estimated delivery time is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Update order with delivery details
-        order.status = 'out_for_delivery'
-        order.delivery_boy_phone = delivery_boy_phone
-        order.vehicle_number = vehicle_number
-        order.vehicle_color = vehicle_color
-        order.estimated_delivery_time = estimated_delivery_time
-        order.delivery_fee = delivery_fee
-        order.out_for_delivery_at = timezone.now()
-        order.notes = request.data.get('notes', 'Order shipped with delivery details')
-        order.save()
-
-        # Create status history
-        OrderStatusHistory.objects.create(
-            order=order,
-            status='out_for_delivery',
-            changed_by=request.user,
-            notes=f'Order shipped - Delivery boy: {delivery_boy_phone}, Vehicle: {vehicle_number} ({vehicle_color})'
-        )
-
-        # Send comprehensive order status notifications
-        send_order_status_notifications(order, 'out_for_delivery', 'confirmed')
-
-        return Response({
-            'message': 'Order shipped successfully',
-            'order': OrderSerializer(order, context={'request': request}).data
-        })
-
-    except VendorProfile.DoesNotExist:
-        return Response({'error': 'Vendor profile not found or not approved'}, status=status.HTTP_403_FORBIDDEN)
-    except Order.DoesNotExist:
-        return Response({'error': 'Order not found or not in confirmed status'}, status=status.HTTP_404_NOT_FOUND)
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
 def quick_update_order_status_api(request, order_id):
     """Quick order status update without complex validation - for debugging"""
     print(f"🔥 QUICK UPDATE ORDER STATUS - Order ID: {order_id}, User: {request.user}")
     print(f"🔥 Request data: {request.data}")
-
+    
     try:
         # Check if order exists
         order = Order.objects.get(id=order_id)
         print(f"🔥 Order found: {order.order_number}, Status: {order.status}")
-
+        
         # Check vendor permission (allow superuser override)
         if not request.user.is_superuser:
             try:
@@ -970,13 +1233,13 @@ def quick_update_order_status_api(request, order_id):
                     return Response({'error': 'Order does not belong to your vendor profile'}, status=status.HTTP_403_FORBIDDEN)
             except VendorProfile.DoesNotExist:
                 return Response({'error': 'Vendor profile not found'}, status=status.HTTP_403_FORBIDDEN)
-
+        
         # Update order directly without serializer validation
         new_status = request.data.get('status')
         if new_status:
             old_status = order.status
             order.status = new_status
-
+            
             # Update delivery info if provided
             if request.data.get('delivery_boy_phone'):
                 order.delivery_boy_phone = request.data.get('delivery_boy_phone')
@@ -990,7 +1253,7 @@ def quick_update_order_status_api(request, order_id):
                 order.delivery_fee = request.data.get('delivery_fee')
             if request.data.get('notes'):
                 order.notes = request.data.get('notes')
-
+            
             # Update timestamps
             if new_status == 'out_for_delivery':
                 order.out_for_delivery_at = timezone.now()
@@ -998,10 +1261,10 @@ def quick_update_order_status_api(request, order_id):
                 order.delivered_at = timezone.now()
             elif new_status == 'confirmed':
                 order.confirmed_at = timezone.now()
-
+            
             order.save()
             print(f"🔥 Order updated successfully: {old_status} -> {new_status}")
-
+            
             # Create status history
             OrderStatusHistory.objects.create(
                 order=order,
@@ -1009,7 +1272,7 @@ def quick_update_order_status_api(request, order_id):
                 changed_by=request.user,
                 notes=request.data.get('notes', f'Status updated to {new_status}')
             )
-
+            
             return Response({
                 'success': True,
                 'message': f'Order status updated to {new_status}',
@@ -1027,11 +1290,10 @@ def quick_update_order_status_api(request, order_id):
             })
         else:
             return Response({'error': 'Status is required'}, status=status.HTTP_400_BAD_REQUEST)
-
+            
     except Order.DoesNotExist:
         print(f"🔥 Order {order_id} not found")
         return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         print(f"🔥 Error: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
