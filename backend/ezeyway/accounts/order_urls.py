@@ -48,7 +48,7 @@ urlpatterns = [
     path('refunds/<int:refund_id>/upload-document/', order_views.upload_refund_document_api, name='upload_refund_document'),
     path('refunds/<int:refund_id>/mark-received/', customer_order_views.mark_refund_received_api, name='mark_refund_received'),
     path('refunds/<int:refund_id>/contact-support/', customer_order_views.contact_support_refund_api, name='contact_support_refund'),
-    
+
     # Admin Order URLs
     path('admin/orders/', order_views.AdminOrderListView.as_view(), name='admin_orders'),
     path('admin/orders/stats/', order_views.admin_order_stats_api, name='admin_order_stats'),
@@ -60,4 +60,7 @@ urlpatterns = [
     # Delivery URLs
     path('delivery/riders/', order_views.DeliveryRiderListView.as_view(), name='delivery_riders'),
     path('delivery/<int:delivery_id>/location/', order_views.update_delivery_location_api, name='update_delivery_location'),
+
+    # Ship order endpoint
+    path('orders/<int:order_id>/ship/', order_views.ship_order_api, name='ship_order'),
 ]
