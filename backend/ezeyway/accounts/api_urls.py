@@ -60,6 +60,7 @@ urlpatterns = [
     path('categories/', api_views.categories_api, name='categories'),
     path('categories/<str:category_name>/subcategories/', api_views.get_subcategories_api, name='get_subcategories'),
     path('categories/parameters/', api_views.get_category_parameters_compat_api, name='get_category_parameters_compat'),
+    path('accounts/categories/parameters/', api_views.get_category_parameters_compat_api, name='accounts_category_parameters'),
     path('products/', api_views.ProductListCreateView.as_view(), name='products'),
     path('products/<int:pk>/', api_views.ProductDetailView.as_view(), name='product_detail'),
     path('delivery-radius/', api_views.get_delivery_radius_api, name='delivery_radius'),
