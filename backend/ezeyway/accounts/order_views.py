@@ -719,7 +719,10 @@ def vendor_process_refund_api(request, refund_id):
         refund.processed_by = request.user
         refund.save()
 
-        message = 'Refund approved'
+        # Send notification to customer that refund is approved
+        send_refund_notification(refund, 'approved')
+
+        message = 'Refund approved - customer will be notified to provide payment details'
 
     elif action == 'process':
         refund.status = 'processed'
@@ -738,7 +741,10 @@ def vendor_process_refund_api(request, refund_id):
             notes=f'Refund processed: {admin_notes}'
         )
 
-        message = 'Refund processed - money transferred'
+        # Send notification to customer that refund has been processed
+        send_refund_notification(refund, 'processed')
+
+        message = 'Refund processed - money transferred to customer'
 
     elif action == 'complete':
         refund.status = 'completed'
@@ -750,7 +756,10 @@ def vendor_process_refund_api(request, refund_id):
         refund.order.payment_status = 'refunded'
         refund.order.save()
 
-        message = 'Refund completed'
+        # Send notification to customer that refund is completed
+        send_refund_notification(refund, 'completed')
+
+        message = 'Refund completed - customer notified'
 
     elif action == 'rejected':
         refund.status = 'rejected'
@@ -758,7 +767,10 @@ def vendor_process_refund_api(request, refund_id):
         refund.processed_by = request.user
         refund.save()
 
-        message = 'Refund request rejected'
+        # Send notification to customer that refund is rejected
+        send_refund_notification(refund, 'rejected')
+
+        message = 'Refund request rejected - customer notified'
 
     else:
         return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
