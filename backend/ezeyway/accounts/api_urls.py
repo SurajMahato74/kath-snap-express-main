@@ -13,6 +13,9 @@ urlpatterns = [
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
 
+    # Vendor Profiles
+    path('vendor-profiles/', api_views.VendorProfileListCreateView.as_view(), name='vendor_profiles'),
+
     # Order Management
     path('orders/', include('accounts.order_urls')),
 
