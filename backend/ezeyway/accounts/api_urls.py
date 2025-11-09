@@ -37,6 +37,10 @@ urlpatterns = [
     path('vendor/orders/<int:order_id>/ship/', order_views.update_order_status_api, name='vendor_ship_order'),
     path('vendor/orders/<int:order_id>/update-status/', order_views.update_order_status_api, name='vendor_update_order_status'),
 
+    # Vendor Refund Processing
+    path('vendor/refunds/<int:refund_id>/approve/', order_views.vendor_process_refund_api, name='vendor_approve_refund'),
+    path('vendor/refunds/<int:refund_id>/reject/', order_views.vendor_process_refund_api, name='vendor_reject_refund'),
+
     # Order Management (customer orders)
     path('orders/', include('accounts.order_urls')),
 
