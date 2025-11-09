@@ -223,15 +223,13 @@ class VendorOrderListView(generics.ListAPIView):
     
     def list(self, request, *args, **kwargs):
         try:
-            return super().list(request, *args, **kwargs)
+            # Override to return all orders without pagination
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
         except Exception:
-            # Return empty page if pagination fails
-            return Response({
-                'count': 0,
-                'next': None,
-                'previous': None,
-                'results': []
-            })
+            # Return empty list if something fails
+            return Response([])
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
