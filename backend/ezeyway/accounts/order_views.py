@@ -724,7 +724,7 @@ def vendor_process_refund_api(request, refund_id):
 
         message = 'Refund approved - customer will be notified to provide payment details'
 
-    elif action == 'process':
+    elif action == 'processed':
         refund.status = 'processed'
         refund.processed_at = timezone.now()
         refund.admin_notes = admin_notes
