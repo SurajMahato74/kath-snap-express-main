@@ -187,7 +187,7 @@ def cancel_order_api(request, order_id):
 class VendorOrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = PageNumberPagination
+    pagination_class = None  # Disable pagination to return all orders
     
     def get_queryset(self):
         try:
