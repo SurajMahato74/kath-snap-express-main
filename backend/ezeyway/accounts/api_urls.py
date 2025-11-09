@@ -9,6 +9,10 @@ urlpatterns = [
     path('logout/', api_views.logout_api, name='logout'),
     path('profile/', api_views.profile_api, name='profile'),
     path('setup-password/', api_views.setup_password_api, name='setup_password'),
+    path('auth/google/', api_views.google_oauth_api, name='google_oauth'),
+    path('auth/facebook/', api_views.facebook_oauth_api, name='facebook_oauth'),
+    path('agree-privacy-policy/', api_views.agree_privacy_policy_api, name='agree_privacy_policy'),
+    path('check-password-setup/', api_views.check_password_setup_api, name='check_password_setup'),
 
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
