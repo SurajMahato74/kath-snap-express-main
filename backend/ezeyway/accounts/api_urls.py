@@ -34,6 +34,7 @@ urlpatterns = [
 
     # Vendor Wallet
     path('vendor-wallet/', api_views.vendor_wallet_api, name='vendor_wallet'),
+    path('wallet/transactions/', api_views.wallet_transactions_api, name='wallet_transactions'),
 
     # Vendor Orders (direct endpoint for frontend compatibility)
     path('vendor/orders/', include('accounts.order_urls')),
