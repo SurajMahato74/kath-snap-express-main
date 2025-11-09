@@ -1129,6 +1129,67 @@ def get_product_reviews_api(request, product_id):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
+def get_order_reviews_api(request, order_id):
+    """Get reviews for a specific order"""
+    try:
+        order = get_object_or_404(Order, id=order_id)
+
+        # Check if user has permission to view reviews (customer, vendor, or admin)
+        has_permission = (
+            request.user == order.customer or
+            request.user.is_superuser
+        )
+
+        # Check if user is the vendor
+        try:
+            vendor_profile = VendorProfile.objects.get(user=request.user, is_approved=True)
+            has_permission = has_permission or (order.vendor == vendor_profile)
+        except VendorProfile.DoesNotExist:
+            pass
+
+        if not has_permission:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get reviews for this order
+        reviews = OrderReview.objects.filter(order=order).select_related('customer')
+
+        # Format the response
+        response_data = reviews.values(
+            'id',
+            'overall_rating',
+            'review_text',
+            'food_quality_rating',
+            'delivery_rating',
+            'vendor_rating',
+            'created_at',
+            customer_name=F('customer__username')
+        ).order_by('-created_at')
+
+        # Convert to list and add any additional processing
+        reviews_list = []
+        for review in response_data:
+            reviews_list.append({
+                'id': review['id'],
+                'rating': review['overall_rating'],
+                'comment': review['review_text'] or '',
+                'quality_rating': review['food_quality_rating'],
+                'value_rating': review['delivery_rating'],
+                'service_rating': review['vendor_rating'],
+                'created_at': review['created_at'],
+                'customer_name': review['customer_name'],
+                'images': []  # Add image handling if needed
+            })
+
+        return Response(reviews_list)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to get order reviews: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
 def get_vendor_reviews_api(request, vendor_id):
     """Get aggregate reviews for a vendor's products"""
     try:
