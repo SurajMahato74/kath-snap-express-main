@@ -57,6 +57,7 @@ urlpatterns = [
 
     # Search Vendors
     path('search/vendors/', api_views.CustomerVendorSearchView.as_view(), name='search_vendors'),
+    path('vendors/<int:vendor_id>/', api_views.CustomerVendorProfileView.as_view(), name='customer_vendor_profile'),
 
     # Categories and Products
     path('categories/', api_views.categories_api, name='categories'),
