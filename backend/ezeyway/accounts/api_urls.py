@@ -13,6 +13,11 @@ urlpatterns = [
     path('auth/facebook/', api_views.facebook_oauth_api, name='facebook_oauth'),
     path('agree-privacy-policy/', api_views.agree_privacy_policy_api, name='agree_privacy_policy'),
     path('check-password-setup/', api_views.check_password_setup_api, name='check_password_setup'),
+    path('send-otp/', api_views.send_otp_api, name='send_otp'),
+    path('verify-otp/', api_views.verify_otp_api, name='verify_otp'),
+    path('verify-email/<str:token>/', api_views.verify_email_api, name='verify_email'),
+    path('update-email/', api_views.update_email_api, name='update_email'),
+    path('resend-verification/', api_views.resend_verification_api, name='resend_verification'),
 
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
