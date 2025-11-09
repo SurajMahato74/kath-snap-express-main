@@ -67,6 +67,7 @@ urlpatterns = [
     path('cart/add/', api_views.add_to_cart_api, name='add_to_cart'),
     path('cart/item/<int:item_id>/update/', api_views.update_cart_item_api, name='update_cart_item'),
     path('cart/item/<int:item_id>/remove/', api_views.remove_from_cart_api, name='remove_from_cart'),
+    path('cart/items/<int:item_id>/remove/', api_views.remove_from_cart_api, name='remove_from_cart_alias'),  # Alias for frontend compatibility
     path('cart/clear/', api_views.clear_cart_api, name='clear_cart'),
 
     # Search Vendors
