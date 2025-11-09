@@ -49,6 +49,10 @@ urlpatterns = [
     # API Admin Vendor Actions (for AJAX calls)
     path('api/admin/vendors/<int:vendor_id>/approve/', views.admin_approve_vendor_api, name='api_admin_approve_vendor'),
     path('api/admin/vendors/<int:vendor_id>/reject/', views.admin_reject_vendor_api, name='api_admin_reject_vendor'),
+
+    # Additional admin endpoints
+    path('admin/vendors/<int:vendor_id>/approve/', views.admin_approve_vendor, name='admin_approve_vendor'),
+    path('admin/vendors/<int:vendor_id>/reject/', views.admin_reject_vendor, name='admin_reject_vendor'),
     
     # Parameter Management AJAX endpoints
     path('superadmin/categories/get-parameters/', parameter_ajax_views.get_category_parameters, name='get_parameters'),
