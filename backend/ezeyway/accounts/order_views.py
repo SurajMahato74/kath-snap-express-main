@@ -275,6 +275,16 @@ def update_order_status_api(request, order_id):
             estimated_delivery_time = request.data.get('estimated_delivery_time', '10')
             delivery_fee = request.data.get('delivery_fee', 0)
             notes = request.data.get('notes', 'Order shipped with delivery details')
+
+            # Validate required fields
+            if not delivery_boy_phone:
+                return Response({'delivery_boy_phone': ['This field is required.']}, status=status.HTTP_400_BAD_REQUEST)
+            if not vehicle_number:
+                return Response({'vehicle_number': ['This field is required.']}, status=status.HTTP_400_BAD_REQUEST)
+            if not vehicle_color:
+                return Response({'vehicle_color': ['This field is required.']}, status=status.HTTP_400_BAD_REQUEST)
+            if not estimated_delivery_time:
+                return Response({'estimated_delivery_time': ['This field is required.']}, status=status.HTTP_400_BAD_REQUEST)
             
             # Update order status and delivery info
             old_status = order.status
