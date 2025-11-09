@@ -2956,7 +2956,7 @@ def send_web_push_notification_api(request):
 
         # Send web push notification
         from .fcm_service import fcm_service
-        success = fcm_service.send_order_web_push_notification(vendor_profile.fcm_token, {
+        success = fcm_service.send_order_notification(vendor_profile.fcm_token, {
             'orderId': str(order_id),
             'orderNumber': order_number,
             'amount': str(amount)
