@@ -53,12 +53,17 @@ def main():
     try:
         # Use Daphne (ASGI server) for WebSocket support
         print("🔥 Starting Daphne ASGI server...")
+        # Set up environment and path before starting
+        env = os.environ.copy()
+        env['DJANGO_SETTINGS_MODULE'] = 'ezeyway.settings'
+        env['PYTHONPATH'] = project_dir
+        
         subprocess.run([
-            sys.executable, '-m', 'daphne', 
+            sys.executable, '-m', 'daphne',
             '-b', '0.0.0.0',
             '-p', '8000',
             'ezeyway.asgi:application'
-        ], check=True)
+        ], check=True, env=env, cwd=project_dir)
         
     except subprocess.CalledProcessError:
         print("❌ Error: Failed to start server")

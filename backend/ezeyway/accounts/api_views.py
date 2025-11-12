@@ -14,6 +14,7 @@ import math
 import logging
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+import uuid
 
 logger = logging.getLogger(__name__)
 from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider
@@ -3119,3 +3120,510 @@ def search_products_api(request):
         'page_size': page_size,
         'total_pages': (final_count + page_size - 1) // page_size
     })
+
+# =============================================================================
+# CALL MANAGEMENT API VIEWS - WhatsApp-like Real-time Calling System
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def initiate_call_api(request):
+    """Initiate a call to another user"""
+    try:
+        to_user_id = request.data.get('to_user_id')
+        call_type = request.data.get('call_type', 'audio')  # 'audio' or 'video'
+        
+        if not to_user_id:
+            return Response({'error': 'to_user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if call_type not in ['audio', 'video']:
+            return Response({'error': 'call_type must be audio or video'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get target user
+        try:
+            to_user = CustomUser.objects.get(id=to_user_id)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Generate unique call ID
+        call_id = f"call_{uuid.uuid4().hex[:16]}"
+        
+        # Create call record
+        call = Call.objects.create(
+            call_id=call_id,
+            caller=request.user,
+            receiver=to_user,
+            call_type=call_type,
+            status='initiated',
+            initiated_at=timezone.now()
+        )
+        
+        # Send FCM notification to callee
+        try:
+            to_vendor_profile = VendorProfile.objects.get(user=to_user)
+            if to_vendor_profile.fcm_token:
+                from .fcm_service import fcm_service
+                fcm_service.send_call_notification(
+                    token=to_vendor_profile.fcm_token,
+                    call_data={
+                        'call_id': call_id,
+                        'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
+                        'caller_id': str(request.user.id),
+                        'call_type': call_type,
+                        'action': 'incoming_call'
+                    }
+                )
+        except VendorProfile.DoesNotExist:
+            # Customer doesn't have vendor profile, try to find FCM token in user model
+            if hasattr(request.user, 'fcm_token') and request.user.fcm_token:
+                from .fcm_service import fcm_service
+                fcm_service.send_call_notification(
+                    token=request.user.fcm_token,
+                    call_data={
+                        'call_id': call_id,
+                        'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
+                        'caller_id': str(request.user.id),
+                        'call_type': call_type,
+                        'action': 'incoming_call'
+                    }
+                )
+        
+        # Send WebSocket notification if target is online
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{to_user.id}",
+                {
+                    'type': 'call_notification',
+                    'call_id': call_id,
+                    'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
+                    'caller_id': str(request.user.id),
+                    'call_type': call_type,
+                    'action': 'incoming_call'
+                }
+            )
+        
+        return Response({
+            'success': True,
+            'call_id': call_id,
+            'status': 'initiated',
+            'message': 'Call initiated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error initiating call: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def answer_call_api(request):
+    """Answer an incoming call"""
+    try:
+        call_id = request.data.get('call_id')
+        
+        if not call_id:
+            return Response({'error': 'call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get call record
+        try:
+            call = Call.objects.get(call_id=call_id)
+        except Call.DoesNotExist:
+            return Response({'error': 'Call not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify user is the callee
+        if call.receiver != request.user:
+            return Response({'error': 'Unauthorized to answer this call'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check call status
+        if call.status != 'initiated':
+            return Response({'error': 'Call is not in a state to be answered'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update call status
+        call.status = 'answered'
+        call.answered_at = timezone.now()
+        call.save()
+        
+        # Send WebSocket notification to caller
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{call.caller.id}",
+                {
+                    'type': 'call_answered',
+                    'call_id': call_id,
+                    'callee_name': f"{request.user.first_name} {request.user.last_name}".strip(),
+                    'callee_id': str(request.user.id)
+                }
+            )
+        
+        return Response({
+            'success': True,
+            'call_id': call_id,
+            'status': 'answered',
+            'message': 'Call answered successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error answering call: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def end_call_api(request):
+    """End a call (either by caller or callee)"""
+    try:
+        call_id = request.data.get('call_id')
+        
+        if not call_id:
+            return Response({'error': 'call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get call record
+        try:
+            call = Call.objects.get(call_id=call_id)
+        except Call.DoesNotExist:
+            return Response({'error': 'Call not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify user is part of this call
+        if request.user not in [call.caller, call.receiver]:
+            return Response({'error': 'Unauthorized to end this call'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Calculate call duration
+        start_time = call.answered_at if call.answered_at else call.initiated_at
+        call_duration = (timezone.now() - start_time).total_seconds()
+        
+        # Update call status
+        call.status = 'ended'
+        call.ended_at = timezone.now()
+        call.duration = call_duration
+        call.save()
+        
+        # Send WebSocket notification to other party
+        other_user = call.receiver if call.caller == request.user else call.caller
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{other_user.id}",
+                {
+                    'type': 'call_ended',
+                    'call_id': call_id,
+                    'duration': call_duration,
+                    'ended_by': str(request.user.id)
+                }
+            )
+        
+        return Response({
+            'success': True,
+            'call_id': call_id,
+            'status': 'ended',
+            'duration': call_duration,
+            'message': 'Call ended successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error ending call: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def reject_call_api(request):
+    """Reject an incoming call"""
+    try:
+        call_id = request.data.get('call_id')
+        
+        if not call_id:
+            return Response({'error': 'call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get call record
+        try:
+            call = Call.objects.get(call_id=call_id)
+        except Call.DoesNotExist:
+            return Response({'error': 'Call not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify user is the callee
+        if call.receiver != request.user:
+            return Response({'error': 'Unauthorized to reject this call'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check call status
+        if call.status != 'initiated':
+            return Response({'error': 'Call is not in a state to be rejected'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update call status
+        call.status = 'rejected'
+        call.ended_at = timezone.now()
+        call.duration = 0
+        call.save()
+        
+        # Send WebSocket notification to caller
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{call.caller.id}",
+                {
+                    'type': 'call_rejected',
+                    'call_id': call_id,
+                    'rejected_by': str(request.user.id)
+                }
+            )
+        
+        return Response({
+            'success': True,
+            'call_id': call_id,
+            'status': 'rejected',
+            'message': 'Call rejected successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error rejecting call: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def update_call_quality_api(request):
+    """Update call quality metrics"""
+    try:
+        call_id = request.data.get('call_id')
+        connection_quality = request.data.get('connection_quality', 'good')
+        network_info = request.data.get('network_info', {})
+        
+        if not call_id:
+            return Response({'error': 'call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get call record
+        try:
+            call = Call.objects.get(call_id=call_id)
+        except Call.DoesNotExist:
+            return Response({'error': 'Call not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify user is part of this call
+        if request.user not in [call.caller, call.receiver]:
+            return Response({'error': 'Unauthorized to update this call'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Update call quality
+        call.connection_quality = connection_quality
+        call.network_info = network_info
+        call.save()
+        
+        # Send WebSocket notification to other party about quality change
+        other_user = call.receiver if call.caller == request.user else call.caller
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{other_user.id}",
+                {
+                    'type': 'call_quality_update',
+                    'call_id': call_id,
+                    'connection_quality': connection_quality,
+                    'updated_by': str(request.user.id)
+                }
+            )
+        
+        return Response({
+            'success': True,
+            'call_id': call_id,
+            'connection_quality': connection_quality,
+            'message': 'Call quality updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating call quality: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def call_history_api(request):
+    """Get call history for current user"""
+    try:
+        # Get user's calls (both as caller and callee)
+        calls = Call.objects.filter(
+            Q(caller=request.user) | Q(receiver=request.user)
+        ).order_by('-initiated_at')
+        
+        # Apply filters
+        status_filter = request.GET.get('status')
+        if status_filter:
+            calls = calls.filter(status=status_filter)
+        
+        call_type_filter = request.GET.get('call_type')
+        if call_type_filter:
+            calls = calls.filter(call_type=call_type_filter)
+        
+        # Pagination
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        
+        total_count = calls.count()
+        paginated_calls = calls[start_index:end_index]
+        
+        # Serialize call history
+        call_history = []
+        for call in paginated_calls:
+            other_user = call.receiver if call.caller == request.user else call.caller
+            other_user_name = f"{other_user.first_name} {other_user.last_name}".strip() or other_user.username
+            
+            call_data = {
+                'call_id': call.call_id,
+                'call_type': call.call_type,
+                'status': call.status,
+                'initiated_at': call.initiated_at.isoformat(),
+                'answered_at': call.answered_at.isoformat() if call.answered_at else None,
+                'ended_at': call.ended_at.isoformat() if call.ended_at else None,
+                'duration': call.duration,
+                'other_user': {
+                    'id': other_user.id,
+                    'name': other_user_name,
+                    'username': other_user.username
+                },
+                'is_outgoing': call.caller == request.user
+            }
+            call_history.append(call_data)
+        
+        return Response({
+            'success': True,
+            'call_history': call_history,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total_count + page_size - 1) // page_size
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching call history: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def active_calls_api(request):
+    """Get currently active calls for current user"""
+    try:
+        # Get user's active calls
+        active_calls = Call.objects.filter(
+            Q(caller=request.user) | Q(receiver=request.user),
+            status__in=['initiated', 'answered']
+        )
+        
+        active_calls_list = []
+        for call in active_calls:
+            other_user = call.receiver if call.caller == request.user else call.caller
+            other_user_name = f"{other_user.first_name} {other_user.last_name}".strip() or other_user.username
+            
+            call_data = {
+                'call_id': call.call_id,
+                'call_type': call.call_type,
+                'status': call.status,
+                'initiated_at': call.initiated_at.isoformat(),
+                'other_user': {
+                    'id': other_user.id,
+                    'name': other_user_name,
+                    'username': other_user.username
+                },
+                'is_outgoing': call.caller == request.user
+            }
+            active_calls_list.append(call_data)
+        
+        return Response({
+            'success': True,
+            'active_calls': active_calls_list,
+            'count': len(active_calls_list)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching active calls: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def send_call_invite_api(request):
+    """Send call invite to multiple users (group calling feature)"""
+    try:
+        user_ids = request.data.get('user_ids', [])
+        call_type = request.data.get('call_type', 'audio')
+        
+        if not user_ids:
+            return Response({'error': 'user_ids list is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if len(user_ids) > 8:  # Limit group size
+            return Response({'error': 'Maximum 8 users allowed in group call'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate unique call ID
+        call_id = f"group_call_{uuid.uuid4().hex[:16]}"
+        
+        # Create call record for group
+        call = Call.objects.create(
+            call_id=call_id,
+            caller=request.user,
+            callee=None,  # Group call
+            call_type=call_type,
+            status='initiated',
+            initiated_at=timezone.now(),
+            participants=request.user.id  # Creator is first participant
+        )
+        
+        # Add other participants
+        participant_list = [request.user.id]
+        for user_id in user_ids:
+            try:
+                user = CustomUser.objects.get(id=user_id)
+                participant_list.append(user_id)
+                
+                # Send FCM notification to each participant
+                try:
+                    user_vendor_profile = VendorProfile.objects.get(user=user)
+                    if user_vendor_profile.fcm_token:
+                        from .fcm_service import fcm_service
+                        fcm_service.send_call_notification(
+                            token=user_vendor_profile.fcm_token,
+                            call_data={
+                                'call_id': call_id,
+                                'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
+                                'caller_id': str(request.user.id),
+                                'call_type': call_type,
+                                'is_group_call': True,
+                                'participant_count': len(participant_list),
+                                'action': 'incoming_group_call'
+                            }
+                        )
+                except VendorProfile.DoesNotExist:
+                    pass
+                    
+            except CustomUser.DoesNotExist:
+                logger.warning(f"User {user_id} not found for group call invite")
+        
+        # Update participants field
+        call.participants = participant_list
+        call.save()
+        
+        return Response({
+            'success': True,
+            'call_id': call_id,
+            'status': 'initiated',
+            'participant_count': len(participant_list),
+            'message': 'Group call initiated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error sending group call invite: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

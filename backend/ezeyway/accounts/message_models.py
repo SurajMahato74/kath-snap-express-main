@@ -74,6 +74,7 @@ class Call(models.Model):
         ('ended', 'Ended'),
         ('missed', 'Missed'),
         ('declined', 'Declined'),
+        ('rejected', 'Rejected'),
     ]
     
     CALL_TYPE = [
@@ -81,15 +82,33 @@ class Call(models.Model):
         ('video', 'Video'),
     ]
     
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='calls')
+    QUALITY_CHOICES = [
+        ('poor', 'Poor'),
+        ('fair', 'Fair'),
+        ('good', 'Good'),
+        ('excellent', 'Excellent'),
+    ]
+    
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='calls', blank=True, null=True)
     caller = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='initiated_calls')
     receiver = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='received_calls')
     call_type = models.CharField(max_length=10, choices=CALL_TYPE, default='audio')
     status = models.CharField(max_length=10, choices=CALL_STATUS, default='initiated')
+    call_id = models.CharField(max_length=100, unique=True, help_text='Unique ID for WebSocket routing')
+    
+    # Timing fields
     started_at = models.DateTimeField(auto_now_add=True)
     answered_at = models.DateTimeField(blank=True, null=True)
     ended_at = models.DateTimeField(blank=True, null=True)
-    duration = models.DurationField(blank=True, null=True)
+    duration = models.IntegerField(default=0, help_text='Duration in seconds')
+    
+    # Quality metrics
+    connection_quality = models.CharField(max_length=10, choices=QUALITY_CHOICES, blank=True, null=True)
+    caller_network_info = models.JSONField(blank=True, null=True, help_text='Network info from caller')
+    receiver_network_info = models.JSONField(blank=True, null=True, help_text='Network info from receiver')
+    
+    # Additional metadata
+    call_metadata = models.JSONField(blank=True, null=True, help_text='Additional call metadata')
     
     class Meta:
         ordering = ['-started_at']
@@ -97,10 +116,32 @@ class Call(models.Model):
     def __str__(self):
         return f"{self.caller.username} -> {self.receiver.username} ({self.status})"
     
+    def generate_call_id(self):
+        """Generate unique call ID for WebSocket routing"""
+        import time
+        if not self.call_id:
+            self.call_id = f"call_{self.caller.id}_{self.receiver.id}_{int(time.time())}"
+        return self.call_id
+    
+    def save(self, *args, **kwargs):
+        # Generate call_id if not exists
+        if not self.call_id:
+            import time
+            self.call_id = f"call_{self.caller.id}_{self.receiver.id}_{int(time.time())}"
+        super().save(*args, **kwargs)
+    
     def end_call(self):
         if self.status in ['answered', 'ringing']:
             self.status = 'ended'
             self.ended_at = timezone.now()
             if self.answered_at:
-                self.duration = self.ended_at - self.answered_at
+                self.duration = int((self.ended_at - self.answered_at).total_seconds())
             self.save()
+    
+    @property
+    def is_active(self):
+        return self.status in ['initiated', 'ringing', 'answered']
+    
+    @property
+    def can_be_answered(self):
+        return self.status in ['initiated', 'ringing'] and not self.ended_at

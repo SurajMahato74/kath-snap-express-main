@@ -229,7 +229,16 @@ class CallConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
         
-        self.call_id = self.scope['url_route']['kwargs']['call_id']
+        # Support both string call_id and integer call_id from URL
+        call_id_param = self.scope['url_route']['kwargs'].get('call_id')
+        
+        # Handle string call_id (from new implementation)
+        if isinstance(call_id_param, str):
+            self.call_id = call_id_param
+        else:
+            # Convert integer call_id to string for compatibility
+            self.call_id = str(call_id_param)
+            
         self.call_group_name = f"call_{self.call_id}"
         
         # Verify user is part of this call
@@ -244,12 +253,25 @@ class CallConsumer(AsyncWebsocketConsumer):
         )
         
         await self.accept()
+        
+        # Send call state to connecting user
+        await self.send_call_state()
 
     async def disconnect(self, close_code):
         if hasattr(self, 'call_group_name'):
             await self.channel_layer.group_discard(
                 self.call_group_name,
                 self.channel_name
+            )
+            
+            # Send user left notification
+            await self.channel_layer.group_send(
+                self.call_group_name,
+                {
+                    'type': 'user_left_call',
+                    'user_id': self.user.id,
+                    'username': self.user.username
+                }
             )
 
     async def receive(self, text_data):
@@ -265,6 +287,14 @@ class CallConsumer(AsyncWebsocketConsumer):
                 await self.handle_ice_candidate(data)
             elif signal_type == 'call_status':
                 await self.handle_call_status(data)
+            elif signal_type == 'call_quality':
+                await self.handle_call_quality(data)
+            elif signal_type == 'join_call':
+                await self.handle_join_call(data)
+            elif signal_type == 'leave_call':
+                await self.handle_leave_call(data)
+            elif signal_type == 'toggle_media':
+                await self.handle_toggle_media(data)
                 
         except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
@@ -272,13 +302,15 @@ class CallConsumer(AsyncWebsocketConsumer):
             }))
 
     async def handle_offer(self, data):
-        # Forward offer to other participant
+        # Forward offer to other participants
         await self.channel_layer.group_send(
             self.call_group_name,
             {
                 'type': 'webrtc_offer',
                 'offer': data.get('offer'),
-                'sender_id': self.user.id
+                'sender_id': self.user.id,
+                'sender_name': self.user.username,
+                'call_type': data.get('call_type', 'audio')
             }
         )
         
@@ -292,12 +324,13 @@ class CallConsumer(AsyncWebsocketConsumer):
             {
                 'type': 'webrtc_answer',
                 'answer': data.get('answer'),
-                'sender_id': self.user.id
+                'sender_id': self.user.id,
+                'sender_name': self.user.username
             }
         )
 
     async def handle_ice_candidate(self, data):
-        # Forward ICE candidate to other participant
+        # Forward ICE candidate to other participants
         await self.channel_layer.group_send(
             self.call_group_name,
             {
@@ -309,7 +342,8 @@ class CallConsumer(AsyncWebsocketConsumer):
 
     async def handle_call_status(self, data):
         status = data.get('status')
-        if status in ['ended', 'declined']:
+        
+        if status in ['answered', 'ended', 'declined', 'missed']:
             await self.update_call_status(status)
             
         # Broadcast status to all participants
@@ -318,7 +352,78 @@ class CallConsumer(AsyncWebsocketConsumer):
             {
                 'type': 'call_status_update',
                 'status': status,
-                'user_id': self.user.id
+                'user_id': self.user.id,
+                'username': self.user.username,
+                'timestamp': data.get('timestamp')
+            }
+        )
+        
+        # Send FCM notification for important status changes
+        if status in ['missed', 'declined']:
+            await self.send_fcm_notification(status)
+
+    async def handle_call_quality(self, data):
+        """Handle call quality updates"""
+        quality_data = {
+            'connection_quality': data.get('connection_quality', 'unknown'),
+            'network_info': data.get('network_info', {}),
+            'sender_id': self.user.id
+        }
+        
+        # Broadcast quality info to other participants
+        await self.channel_layer.group_send(
+            self.call_group_name,
+            {
+                'type': 'call_quality_update',
+                **quality_data
+            }
+        )
+        
+        # Update call record with quality metrics
+        await self.update_call_quality(quality_data)
+
+    async def handle_join_call(self, data):
+        """Handle user joining an active call"""
+        # Broadcast user joined to other participants
+        await self.channel_layer.group_send(
+            self.call_group_name,
+            {
+                'type': 'user_joined_call',
+                'user_id': self.user.id,
+                'username': self.user.username,
+                'call_type': data.get('call_type', 'audio')
+            }
+        )
+        
+        # Update call participants list if this is a group call
+        await self.update_call_participants()
+
+    async def handle_leave_call(self, data):
+        """Handle user leaving the call"""
+        # Broadcast user left to other participants
+        await self.channel_layer.group_send(
+            self.call_group_name,
+            {
+                'type': 'user_left_call',
+                'user_id': self.user.id,
+                'username': self.user.username,
+                'reason': data.get('reason', 'normal')
+            }
+        )
+        
+        # Update call status if all users left
+        await self.check_call_termination()
+
+    async def handle_toggle_media(self, data):
+        """Handle media toggle (mute/unmute, camera on/off)"""
+        await self.channel_layer.group_send(
+            self.call_group_name,
+            {
+                'type': 'media_toggle',
+                'user_id': self.user.id,
+                'media_type': data.get('media_type'),  # 'audio' or 'video'
+                'enabled': data.get('enabled'),
+                'username': self.user.username
             }
         )
 
@@ -328,7 +433,9 @@ class CallConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'offer',
                 'offer': event['offer'],
-                'sender_id': event['sender_id']
+                'sender_id': event['sender_id'],
+                'sender_name': event['sender_name'],
+                'call_type': event.get('call_type', 'audio')
             }))
 
     async def webrtc_answer(self, event):
@@ -336,7 +443,8 @@ class CallConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'answer',
                 'answer': event['answer'],
-                'sender_id': event['sender_id']
+                'sender_id': event['sender_id'],
+                'sender_name': event['sender_name']
             }))
 
     async def webrtc_ice_candidate(self, event):
@@ -351,32 +459,223 @@ class CallConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'call_status',
             'status': event['status'],
-            'user_id': event['user_id']
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'timestamp': event.get('timestamp')
+        }))
+        
+    async def call_quality_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'call_quality',
+            'connection_quality': event['connection_quality'],
+            'network_info': event['network_info'],
+            'sender_id': event['sender_id']
+        }))
+        
+    async def user_joined_call(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'user_joined',
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'call_type': event.get('call_type', 'audio')
+        }))
+        
+    async def user_left_call(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'user_left',
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'reason': event.get('reason', 'normal')
+        }))
+        
+    async def media_toggle(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'media_toggle',
+            'user_id': event['user_id'],
+            'media_type': event['media_type'],
+            'enabled': event['enabled'],
+            'username': event['username']
+        }))
+
+    # Call notification handlers for API-triggered events
+    async def call_notification(self, event):
+        """Handle call notifications from API"""
+        await self.send(text_data=json.dumps({
+            'type': 'incoming_call',
+            'call_id': event['call_id'],
+            'caller_name': event['caller_name'],
+            'caller_id': event['caller_id'],
+            'call_type': event['call_type'],
+            'action': event['action']
+        }))
+        
+    async def call_answered(self, event):
+        """Handle call answered notifications"""
+        await self.send(text_data=json.dumps({
+            'type': 'call_answered',
+            'call_id': event['call_id'],
+            'callee_name': event['callee_name'],
+            'callee_id': event['callee_id']
+        }))
+        
+    async def call_rejected(self, event):
+        """Handle call rejected notifications"""
+        await self.send(text_data=json.dumps({
+            'type': 'call_rejected',
+            'call_id': event['call_id'],
+            'rejected_by': event['rejected_by']
+        }))
+        
+    async def call_ended(self, event):
+        """Handle call ended notifications"""
+        await self.send(text_data=json.dumps({
+            'type': 'call_ended',
+            'call_id': event['call_id'],
+            'duration': event['duration'],
+            'ended_by': event['ended_by']
         }))
 
     # Database operations
     @database_sync_to_async
     def verify_call_access(self):
         try:
-            call = Call.objects.get(id=self.call_id)
-            return call.caller == self.user or call.receiver == self.user
+            call = Call.objects.get(call_id=self.call_id)
+            # Check if user is caller, receiver, or participant in group call
+            if call.caller == self.user:
+                return True
+            if call.receiver == self.user:
+                return True
+            if call.participants and self.user.id in call.participants:
+                return True
+            return False
         except Call.DoesNotExist:
             return False
 
     @database_sync_to_async
     def update_call_status(self, status):
         try:
-            call = Call.objects.get(id=self.call_id)
+            call = Call.objects.get(call_id=self.call_id)
             call.status = status
-            if status == 'answered':
-                from django.utils import timezone
+            from django.utils import timezone
+            if status == 'answered' and not call.answered_at:
                 call.answered_at = timezone.now()
-            elif status in ['ended', 'declined']:
-                call.end_call()
+            elif status in ['ended', 'declined', 'rejected'] and not call.ended_at:
+                call.ended_at = timezone.now()
+                if status in ['answered', 'ended'] and call.answered_at:
+                    call.duration = (timezone.now() - call.answered_at).total_seconds()
             call.save()
             return True
         except Call.DoesNotExist:
             return False
+            
+    @database_sync_to_async
+    def update_call_quality(self, quality_data):
+        try:
+            call = Call.objects.get(call_id=self.call_id)
+            call.connection_quality = quality_data.get('connection_quality', 'unknown')
+            call.network_info = quality_data.get('network_info', {})
+            call.save()
+            return True
+        except Call.DoesNotExist:
+            return False
+            
+    @database_sync_to_async
+    def update_call_participants(self):
+        try:
+            call = Call.objects.get(call_id=self.call_id)
+            if call.participants:
+                if self.user.id not in call.participants:
+                    call.participants.append(self.user.id)
+                    call.save()
+            return True
+        except Call.DoesNotExist:
+            return False
+            
+    @database_sync_to_async
+    def check_call_termination(self):
+        try:
+            call = Call.objects.get(call_id=self.call_id)
+            # If this was a group call, check if all users left
+            if call.participants and len(call.participants) > 1:
+                # For group calls, don't auto-terminate
+                return True
+            # For individual calls, check if both parties have left
+            from django.utils import timezone
+            call.ended_at = timezone.now()
+            call.status = 'ended'
+            if call.answered_at:
+                call.duration = (timezone.now() - call.answered_at).total_seconds()
+            call.save()
+            return True
+        except Call.DoesNotExist:
+            return False
+    
+    async def send_call_state(self):
+        """Send current call state to connecting user"""
+        call_data = await self.get_call_data()
+        if call_data:
+            await self.send(text_data=json.dumps({
+                'type': 'call_state',
+                'call': call_data
+            }))
+    
+    @database_sync_to_async
+    def get_call_data(self):
+        try:
+            call = Call.objects.get(call_id=self.call_id)
+            return {
+                'call_id': call.call_id,
+                'call_type': call.call_type,
+                'status': call.status,
+                'initiated_at': call.initiated_at.isoformat(),
+                'answered_at': call.answered_at.isoformat() if call.answered_at else None,
+                'caller': {
+                    'id': call.caller.id,
+                    'name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username
+                },
+                'callee': {
+                    'id': call.receiver.id,
+                    'name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username
+                } if call.receiver else None,
+                'participants': call.participants or []
+            }
+        except Call.DoesNotExist:
+            return None
+    
+    async def send_fcm_notification(self, status):
+        """Send FCM notification for missed calls, etc."""
+        try:
+            call = Call.objects.get(call_id=self.call_id)
+            from .fcm_service import fcm_service
+            
+            # Determine who should receive the notification
+            if status == 'missed' and call.caller == self.user:
+                # Caller's call was missed - notify callee
+                target_user = call.receiver
+            elif status == 'declined' and call.receiver == self.user:
+                # Callee declined - notify caller
+                target_user = call.caller
+            else:
+                return  # No notification needed
+            
+            # Try to get FCM token
+            try:
+                vendor_profile = VendorProfile.objects.get(user=target_user)
+                if vendor_profile.fcm_token:
+                    fcm_service.send_call_notification(
+                        token=vendor_profile.fcm_token,
+                        call_data={
+                            'call_id': self.call_id,
+                            'status': status,
+                            'from_user': f"{self.user.first_name} {self.user.last_name}".strip(),
+                            'action': 'call_missed'
+                        }
+                    )
+            except VendorProfile.DoesNotExist:
+                pass  # Customer doesn't have vendor profile
+                
+        except Call.DoesNotExist:
+            pass
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):
