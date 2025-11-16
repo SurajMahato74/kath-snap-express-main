@@ -6,12 +6,38 @@ from datetime import time
 from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category
 
 class UserSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+    
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'user_type', 'phone_number', 'address', 
+        fields = ['id', 'username', 'display_name', 'email', 'user_type', 'phone_number', 'address', 
                   'date_of_birth', 'profile_picture', 'profile_picture_url', 'google_id', 'is_verified', 'email_verified', 
                   'phone_verified', 'privacy_policy_agreed', 'created_at', 'plain_password', 'first_name', 'last_name', 'referral_code']
         read_only_fields = ['id', 'created_at', 'is_verified', 'email_verified', 'phone_verified', 'google_id', 'referral_code']
+    
+    def get_display_name(self, obj):
+        """Return a meaningful display name for the user"""
+        # For vendors, try to get business name from vendor profile
+        if obj.user_type == 'vendor':
+            try:
+                vendor_profile = obj.vendor_profile
+                if vendor_profile.business_name:
+                    return vendor_profile.business_name
+            except:
+                pass
+        
+        # For customers or if vendor doesn't have business name, use first/last name
+        if obj.first_name or obj.last_name:
+            name_parts = []
+            if obj.first_name:
+                name_parts.append(obj.first_name)
+            if obj.last_name:
+                name_parts.append(obj.last_name)
+            if name_parts:
+                return ' '.join(name_parts)
+        
+        # Fallback to username if no other name is available
+        return obj.username
     
     def validate_date_of_birth(self, value):
         # Convert empty string to None for DateField

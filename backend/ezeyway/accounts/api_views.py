@@ -68,6 +68,7 @@ def setup_password_api(request):
 from .utils import send_otp_email, send_verification_email, send_password_reset_email
 from accounts import serializers
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.decorators import parser_classes
 
 @csrf_exempt
 @api_view(['POST'])
@@ -1323,24 +1324,13 @@ class CustomerProductSearchView(generics.ListAPIView):
             vendor__is_approved=True
         ).select_related('vendor').prefetch_related('images')
         
-        # Filter for online vendors only
+        # TEMPORARILY DISABLE BUSINESS HOURS FILTERING FOR TESTING
+        # Filter for online vendors only - simplified to just check is_active
         online_vendors = []
         for product in queryset:
             vendor = product.vendor
-            
-            # Check if vendor has status override for today
-            if vendor.status_override and vendor.status_override_date == current_date:
-                if vendor.is_active:
-                    online_vendors.append(product.id)
-                continue
-            
-            # Check business hours for current day
-            day_open = getattr(vendor, f'{current_day}_open')
-            day_close = getattr(vendor, f'{current_day}_close')
-            day_closed = getattr(vendor, f'{current_day}_closed')
-            
-            # Vendor is online if not closed and current time is within business hours
-            if not day_closed and day_open and day_close and day_open <= current_time < day_close:
+            # Only check if vendor is manually set to active, ignore business hours
+            if vendor.is_active:
                 online_vendors.append(product.id)
         
         queryset = queryset.filter(id__in=online_vendors)
@@ -1428,22 +1418,12 @@ class CustomerVendorSearchView(generics.ListAPIView):
         # Initial filter - only approved vendors
         queryset = VendorProfile.objects.filter(is_approved=True)
         
-        # Filter for online vendors only
+        # TEMPORARILY DISABLE BUSINESS HOURS FILTERING FOR TESTING
+        # Filter for online vendors only - simplified to just check is_active
         online_vendors = []
         for vendor in queryset:
-            # Check if vendor has status override for today
-            if vendor.status_override and vendor.status_override_date == current_date:
-                if vendor.is_active:
-                    online_vendors.append(vendor.id)
-                continue
-            
-            # Check business hours for current day
-            day_open = getattr(vendor, f'{current_day}_open')
-            day_close = getattr(vendor, f'{current_day}_close')
-            day_closed = getattr(vendor, f'{current_day}_closed')
-            
-            # Vendor is online if not closed and current time is within business hours
-            if not day_closed and day_open and day_close and day_open <= current_time < day_close:
+            # Only check if vendor is manually set to active, ignore business hours
+            if vendor.is_active:
                 online_vendors.append(vendor.id)
         
         queryset = queryset.filter(id__in=online_vendors)
@@ -1543,26 +1523,13 @@ class UserFavoriteListView(generics.ListAPIView):
         
         queryset = UserFavorite.objects.filter(user=self.request.user)
         
-        # Filter out favorites from offline vendors
+        # TEMPORARILY DISABLE BUSINESS HOURS FILTERING FOR TESTING
+        # Filter out favorites from offline vendors - simplified to just check is_active
         online_favorites = []
         for favorite in queryset:
             vendor = favorite.product.vendor
-            is_online = False
-            
-            # Check if vendor has status override for today
-            if vendor.status_override and vendor.status_override_date == current_date:
-                is_online = vendor.is_active
-            else:
-                # Check business hours for current day
-                day_open = getattr(vendor, f'{current_day}_open')
-                day_close = getattr(vendor, f'{current_day}_close')
-                day_closed = getattr(vendor, f'{current_day}_closed')
-                
-                # Vendor is online if not closed and current time is within business hours
-                if not day_closed and day_open and day_close and day_open <= current_time < day_close:
-                    is_online = True
-            
-            if is_online:
+            # Only check if vendor is manually set to active, ignore business hours
+            if vendor.is_active:
                 online_favorites.append(favorite.id)
         
         return queryset.filter(id__in=online_favorites)
@@ -1625,7 +1592,8 @@ def toggle_favorite_api(request):
 def get_cart_api(request):
     cart, created = Cart.objects.get_or_create(user=request.user)
     
-    # Filter out items from offline vendors
+    # TEMPORARILY DISABLE BUSINESS HOURS FILTERING FOR TESTING
+    # Filter out items from offline vendors - simplified to just check is_active
     current_time = timezone.now().time()
     current_day = timezone.now().strftime('%A').lower()
     current_date = timezone.now().date()
@@ -1633,22 +1601,8 @@ def get_cart_api(request):
     offline_items = []
     for item in cart.items.all():
         vendor = item.product.vendor
-        is_online = False
-        
-        # Check if vendor has status override for today
-        if vendor.status_override and vendor.status_override_date == current_date:
-            is_online = vendor.is_active
-        else:
-            # Check business hours for current day
-            day_open = getattr(vendor, f'{current_day}_open')
-            day_close = getattr(vendor, f'{current_day}_close')
-            day_closed = getattr(vendor, f'{current_day}_closed')
-            
-            # Vendor is online if not closed and current time is within business hours
-            if not day_closed and day_open and day_close and day_open <= current_time < day_close:
-                is_online = True
-        
-        if not is_online:
+        # Only check if vendor is manually set to active, ignore business hours
+        if not vendor.is_active:
             offline_items.append(item.id)
     
     # Remove offline vendor items from cart
@@ -2997,6 +2951,95 @@ def categories_api(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@parser_classes([MultiPartParser, FormParser])
+def image_search_api(request):
+    """Search products using image similarity (basic implementation)"""
+    try:
+        if 'image' not in request.FILES:
+            return Response({'error': 'Image file is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        uploaded_image = request.FILES['image']
+        
+        # Basic validation
+        if uploaded_image.size > 5 * 1024 * 1024:  # 5MB limit
+            return Response({'error': 'Image file too large (max 5MB)'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # For now, implement a simple keyword-based search
+        # In a real implementation, you would use AI/ML for image recognition
+        # This is a placeholder that returns random products for demo
+        
+        # Get current time and day for vendor availability check
+        current_time = timezone.now().time()
+        current_day = timezone.now().strftime('%A').lower()
+        current_date = timezone.now().date()
+        
+        # Get active products from online vendors
+        queryset = Product.objects.filter(
+            status='active',
+            vendor__is_approved=True
+        ).select_related('vendor').prefetch_related('images')
+        
+        # TEMPORARILY DISABLE BUSINESS HOURS FILTERING FOR TESTING
+        # Filter for online vendors only - simplified to just check is_active
+        online_vendors = []
+        for product in queryset:
+            vendor = product.vendor
+            # Only check if vendor is manually set to active, ignore business hours
+            if vendor.is_active:
+                online_vendors.append(product.id)
+        
+        queryset = queryset.filter(id__in=online_vendors)
+        
+        # Location-based filtering
+        user_lat = request.POST.get('latitude')
+        user_lon = request.POST.get('longitude')
+        
+        if user_lat and user_lon:
+            try:
+                user_lat = float(user_lat)
+                user_lon = float(user_lon)
+                
+                # Filter products by vendor delivery radius
+                filtered_products = []
+                for product in queryset:
+                    vendor = product.vendor
+                    
+                    if vendor.latitude and vendor.longitude and vendor.delivery_radius:
+                        distance = calculate_distance(
+                            user_lat, user_lon,
+                            vendor.latitude, vendor.longitude
+                        )
+                        
+                        if distance <= vendor.delivery_radius:
+                            filtered_products.append(product.id)
+                
+                queryset = queryset.filter(id__in=filtered_products)
+            except (ValueError, TypeError):
+                pass
+        
+        # For demo purposes, return first 10 products
+        # In real implementation, use image recognition AI to find similar products
+        results = queryset[:10]
+        
+        # Serialize results
+        from .serializers import CustomerProductSerializer
+        serializer = CustomerProductSerializer(results, many=True, context={'request': request})
+        
+        return Response({
+            'success': True,
+            'results': serializer.data,
+            'count': len(serializer.data),
+            'message': f'Found {len(serializer.data)} products matching your image'
+        })
+        
+    except Exception as e:
+        logger.error(f"Image search error: {str(e)}")
+        return Response({
+            'error': 'Image search failed. Please try again.'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def search_products_api(request):
@@ -3015,24 +3058,13 @@ def search_products_api(request):
         vendor__is_approved=True
     ).select_related('vendor').prefetch_related('images')
 
-    # Filter for online vendors only
+    # TEMPORARILY DISABLE BUSINESS HOURS FILTERING FOR TESTING
+    # Filter for online vendors only - simplified to just check is_active
     online_vendors = []
     for product in queryset:
         vendor = product.vendor
-
-        # Check if vendor has status override for today
-        if vendor.status_override and vendor.status_override_date == current_date:
-            if vendor.is_active:
-                online_vendors.append(product.id)
-            continue
-
-        # Check business hours for current day
-        day_open = getattr(vendor, f'{current_day}_open')
-        day_close = getattr(vendor, f'{current_day}_close')
-        day_closed = getattr(vendor, f'{current_day}_closed')
-
-        # Vendor is online if not closed and current time is within business hours
-        if not day_closed and day_open and day_close and day_open <= current_time < day_close:
+        # Only check if vendor is manually set to active, ignore business hours
+        if vendor.is_active:
             online_vendors.append(product.id)
 
     queryset = queryset.filter(id__in=online_vendors)

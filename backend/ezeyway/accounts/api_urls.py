@@ -101,6 +101,7 @@ urlpatterns = [
     path('delivery-radius/', api_views.get_delivery_radius_api, name='delivery_radius'),
     path('sliders/', api_views.get_sliders_api, name='sliders'),
     path('search/products/', api_views.search_products_api, name='search_products'),
+    path('search/image/', api_views.image_search_api, name='image_search'),
 
     # Admin Vendor Actions (for AJAX calls)
     path('admin/vendors/<int:vendor_id>/approve/', api_views.admin_approve_vendor_api, name='api_admin_approve_vendor'),
