@@ -209,15 +209,21 @@ def profile_api(request):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def upload_picture_api(request):
-    """Upload user profile picture"""
+    """Upload user profile picture (accepts either 'picture' or 'profile_picture' form field)"""
     try:
         user = request.user
-        
-        if 'picture' not in request.FILES:
+
+        # Accept either 'picture' or 'profile_picture' to be compatible with frontend variations
+        picture = None
+        if 'picture' in request.FILES:
+            picture = request.FILES['picture']
+        elif 'profile_picture' in request.FILES:
+            picture = request.FILES['profile_picture']
+
+        if not picture:
             return Response({'error': 'No picture provided'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        picture = request.FILES['picture']
         
         # Validate file size (max 5MB)
         if picture.size > 5 * 1024 * 1024:
