@@ -9,6 +9,7 @@ urlpatterns = [
     path('login/', api_views.login_api, name='login'),
     path('logout/', api_views.logout_api, name='logout'),
     path('profile/', api_views.profile_api, name='profile'),
+    path('profile/upload-picture/', api_views.upload_picture_api, name='upload_picture'),
     path('setup-password/', api_views.setup_password_api, name='setup_password'),
     path('auth/google/', api_views.google_oauth_api, name='google_oauth'),
     path('auth/facebook/', api_views.facebook_oauth_api, name='facebook_oauth'),

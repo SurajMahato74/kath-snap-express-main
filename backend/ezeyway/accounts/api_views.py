@@ -207,6 +207,63 @@ def profile_api(request):
         print(f"🔑 Profile API error: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def upload_picture_api(request):
+    """Upload user profile picture"""
+    try:
+        user = request.user
+        
+        if 'picture' not in request.FILES:
+            return Response({'error': 'No picture provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        picture = request.FILES['picture']
+        
+        # Validate file size (max 5MB)
+        if picture.size > 5 * 1024 * 1024:
+            return Response({'error': 'File size too large. Max 5MB allowed'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if picture.content_type not in allowed_types:
+            return Response({'error': 'Invalid file type. Only JPEG, PNG, GIF, WebP allowed'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Save file to media directory
+        import os
+        from django.conf import settings
+        
+        media_dir = os.path.join(settings.MEDIA_ROOT, 'profile_pictures')
+        os.makedirs(media_dir, exist_ok=True)
+        
+        # Generate unique filename
+        import uuid
+        ext = os.path.splitext(picture.name)[1]
+        filename = f"{user.id}_{uuid.uuid4()}{ext}"
+        filepath = os.path.join(media_dir, filename)
+        
+        # Save file
+        with open(filepath, 'wb') as f:
+            for chunk in picture.chunks():
+                f.write(chunk)
+        
+        # Store relative path in database
+        relative_path = f"profile_pictures/{filename}"
+        user.profile_picture = relative_path
+        user.save()
+        
+        # Get full URL
+        picture_url = f"{settings.MEDIA_URL}{relative_path}"
+        
+        return Response({
+            'success': True,
+            'message': 'Profile picture uploaded successfully',
+            'profile_picture': picture_url
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"❌ Upload picture error: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def test_api(request):
@@ -1284,6 +1341,33 @@ class SearchPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 50
+    
+    def paginate_queryset(self, queryset, request, view=None):
+        """Paginate queryset but return empty list instead of raising 404 for out-of-range pages."""
+        try:
+            return super().paginate_queryset(queryset, request, view)
+        except Exception as e:
+            # If the paginator would raise NotFound for an out-of-range page,
+            # return an empty list and keep internal state so get_paginated_response can work.
+            from rest_framework.exceptions import NotFound
+            if isinstance(e, NotFound):
+                # Mark that page is out of range
+                self.page = None
+                self.request = request
+                return []
+            # Re-raise other exceptions
+            raise
+
+    def get_paginated_response(self, data):
+        # If paginate_queryset returned [] due to out-of-range page, return a safe empty paginated response
+        if getattr(self, 'page', None) is None:
+            return Response({
+                'count': 0,
+                'next': None,
+                'previous': None,
+                'results': data
+            })
+        return super().get_paginated_response(data)
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Google Maps precision Haversine formula with higher precision"""
