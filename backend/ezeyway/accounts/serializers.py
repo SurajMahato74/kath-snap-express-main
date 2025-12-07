@@ -67,31 +67,31 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    email = serializers.EmailField()
     password = serializers.CharField()
 
     def validate(self, attrs):
-        username = attrs.get('username')
-        password = attrs.get('password')
+        email = attrs.get("email")
+        password = attrs.get("password")
 
-        if not username or not password:
-            raise serializers.ValidationError("Must include username and password")
+        if not email or not password:
+            raise serializers.ValidationError("Must include email and password")
 
-        # Check if user exists first
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        
-        try:
-            user_obj = User.objects.get(username=username)
-        except User.DoesNotExist:
-            raise serializers.ValidationError({"username": "User not found"})
 
-        # User exists → now check password
+        # 1️⃣ Check if user exists by email
+        try:
+            user_obj = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"email": "User not found"})
+
+        # 2️⃣ Check password
         if not user_obj.check_password(password):
             raise serializers.ValidationError({"password": "Invalid password"})
 
-        # Authenticate user
-        user = authenticate(username=username, password=password)
+        # 3️⃣ Authenticate
+        user = authenticate(username=user_obj.username, password=password)
 
         if not user:
             raise serializers.ValidationError("Authentication failed")
@@ -100,6 +100,7 @@ class LoginSerializer(serializers.Serializer):
         attrs["needs_verification"] = not user.email_verified and not user.is_superadmin
 
         return attrs
+
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField()
