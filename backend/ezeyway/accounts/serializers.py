@@ -69,19 +69,35 @@ class RegisterSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
-    
+
     def validate(self, attrs):
         username = attrs.get('username')
         password = attrs.get('password')
 
-        if username and password:
-            user = authenticate(username=username, password=password)
-            if not user:
-                raise serializers.ValidationError('Invalid credentials')
-            attrs['user'] = user
-            attrs['needs_verification'] = not user.email_verified and not user.is_superadmin
-        else:
-            raise serializers.ValidationError('Must include username and password')
+        if not username or not password:
+            raise serializers.ValidationError("Must include username and password")
+
+        # Check if user exists first
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
+        try:
+            user_obj = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"username": "User not found"})
+
+        # User exists → now check password
+        if not user_obj.check_password(password):
+            raise serializers.ValidationError({"password": "Invalid password"})
+
+        # Authenticate user
+        user = authenticate(username=username, password=password)
+
+        if not user:
+            raise serializers.ValidationError("Authentication failed")
+
+        attrs["user"] = user
+        attrs["needs_verification"] = not user.email_verified and not user.is_superadmin
 
         return attrs
 
