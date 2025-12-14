@@ -165,11 +165,22 @@ def logout_api(request):
     except:
         return Response({'error': 'Error logging out'}, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['GET'])
+@api_view(['GET', 'PATCH'])  # <--- CHANGED: Added 'PATCH'
 @permission_classes([permissions.IsAuthenticated])
 def profile_api(request):
     try:
         user = request.user
+
+        # --- HANDLE PROFILE UPDATE (PATCH) ---
+        if request.method == 'PATCH':
+            print(f"📝 Profile Update requested by: {user.username}")
+            serializer = UserSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- EXISTING GET LOGIC ---
         print(f"🔑 Profile API called by user: {user.username}, authenticated: {user.is_authenticated}")
 
         # Ensure token exists and is valid
@@ -206,7 +217,7 @@ def profile_api(request):
     except Exception as e:
         print(f"🔑 Profile API error: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
