@@ -8,10 +8,14 @@ from .order_serializers import OrderNotificationSerializer
 class NotificationListView(generics.ListAPIView):
     serializer_class = OrderNotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def get_queryset(self):
         return OrderNotification.objects.filter(
             recipient=self.request.user
+        ).select_related(
+            'order',
+            'order__customer',
+            'order__vendor'
         ).order_by('-created_at')
 
 @api_view(['POST'])

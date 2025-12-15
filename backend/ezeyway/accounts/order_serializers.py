@@ -96,15 +96,55 @@ class OrderRefundSerializer(serializers.ModelSerializer):
             'completed_at', 'appeal_at', 'processed_by', 'customer_received_at', 'support_contacted_at'
         ]
 
+
 class OrderNotificationSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    
+    # Optional but very useful for frontend
+    customer_username = serializers.CharField(source='order.customer.username', read_only=True)
+    vendor_business_name = serializers.CharField(source='order.vendor.business_name', read_only=True)
+
     class Meta:
         model = OrderNotification
         fields = [
-            'id', 'notification_type', 'title', 'message', 'is_sent', 'is_read',
-            'sent_at', 'read_at', 'created_at'
+            'id',
+            'notification_type',
+            'title',
+            'message',
+            'is_sent',
+            'is_read',
+            'sent_at',
+            'read_at',
+            'created_at',
+            'role',                  # ← New: tells frontend if it's customer or vendor notification
+            'order_number',          # ← Helpful
+            'customer_username',     # ← Shows who placed the order (for vendor)
+            'vendor_business_name',  # ← Shows which shop (for customer)
         ]
-        read_only_fields = ['id', 'sent_at', 'read_at', 'created_at']
+        read_only_fields = [
+            'id', 'notification_type', 'title', 'message', 'is_sent',
+            'is_read', 'sent_at', 'read_at', 'created_at',
+            'role', 'order_number', 'customer_username', 'vendor_business_name'
+        ]
 
+    def get_role(self, obj: OrderNotification) -> str:
+        """
+        Determines whether this notification is for the user as 'customer' or 'vendor'
+        """
+        user = self.context['request'].user
+
+        # If the logged-in user is the customer of this order → customer role
+        if obj.order.customer == user:
+            return 'customer'
+
+        # If the logged-in user is the vendor (via VendorProfile.user)
+        if obj.order.vendor.user == user:
+            return 'vendor'
+
+        # Fallback (should rarely happen)
+        return 'unknown'
+    
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     customer_details = UserSerializer(source='customer', read_only=True)
