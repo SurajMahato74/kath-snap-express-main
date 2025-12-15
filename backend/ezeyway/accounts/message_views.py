@@ -62,11 +62,13 @@ class MessageListView(generics.ListAPIView):
 def send_message_api(request):
     # Handle special case for superadmin recipient_type
     if request.data.get('recipient_type') == 'superadmin':
-        # Find the superadmin user (ezeywaya)
         try:
-            superadmin_user = CustomUser.objects.get(username='ezeywaya')
+            superadmin_user = CustomUser.objects.get(is_superuser=True)
         except CustomUser.DoesNotExist:
             return Response({'error': 'Superadmin not found'}, status=status.HTTP_404_NOT_FOUND)
+        except CustomUser.MultipleObjectsReturned:
+            # If multiple superusers exist, pick the first one
+            superadmin_user = CustomUser.objects.filter(is_superuser=True).first()
 
         # Check if conversation already exists
         conversation = Conversation.objects.filter(
@@ -355,10 +357,11 @@ def message_image_api(request, message_id):
 def create_support_conversation_api(request):
     """Create a conversation with superadmin for support"""
     try:
-        superadmin_user = CustomUser.objects.get(username='ezeywaya')
+        superadmin_user = CustomUser.objects.get(is_superuser=True)
     except CustomUser.DoesNotExist:
         return Response({'error': 'Support not available'}, status=status.HTTP_404_NOT_FOUND)
-
+    except CustomUser.MultipleObjectsReturned:
+        superadmin_user = CustomUser.objects.filter(is_superuser=True).first()
     # Check if conversation already exists
     conversation = Conversation.objects.filter(
         participants=request.user
