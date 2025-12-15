@@ -40,21 +40,44 @@ class ConversationSerializer(serializers.ModelSerializer):
     
     def get_other_participant(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            other_participants = obj.participants.exclude(id=request.user.id)
-            if other_participants.exists():
-                # For vendor (user_type='vendor'), prioritize customers
-                if request.user.user_type == 'vendor':
-                    customer_participants = other_participants.filter(user_type='customer')
-                    if customer_participants.exists():
-                        # Exclude admin/ezeyway user (id=1) if there are other customers
-                        non_admin_customers = customer_participants.exclude(id=1)
-                        if non_admin_customers.exists():
-                            return UserSerializer(non_admin_customers.first()).data
-                        return UserSerializer(customer_participants.first()).data
-                return UserSerializer(other_participants.first()).data
-        return None
+        if not request or not request.user.is_authenticated:
+            return None
 
+        current_user = request.user
+        other_participants = obj.participants.exclude(id=current_user.id)
+
+        if not other_participants.exists():
+            return None
+
+        # Handle 1-on-1 chats directly (most common)
+        if other_participants.count() == 1:
+            return UserSerializer(other_participants.first()).data
+
+        # For group/multi-participant chats: filter out system/admin users first
+        # Adjust 'admin', 'ezeyway', 'superadmin' based on your actual user_type values
+        preferred_participants = other_participants.exclude(
+            user_type__in=['admin', 'ezeyway', 'superadmin']
+        )
+
+        if preferred_participants.exists():
+            other_participants = preferred_participants
+
+        # Role-based priority
+        if current_user.user_type == 'vendor':
+            # Vendor: always prefer a real customer
+            customers = other_participants.filter(user_type='customer')
+            if customers.exists():
+                return UserSerializer(customers.first()).data
+
+        elif current_user.user_type == 'customer':
+            # Customer: prefer the vendor they're talking to
+            vendors = other_participants.filter(user_type='vendor')
+            if vendors.exists():
+                return UserSerializer(vendors.first()).data
+
+        # Safe fallback: first remaining participant (never None)
+        return UserSerializer(other_participants.first()).data
+    
 class CallSerializer(serializers.ModelSerializer):
     caller = UserSerializer(read_only=True)
     receiver = UserSerializer(read_only=True)

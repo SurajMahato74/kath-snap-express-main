@@ -22,8 +22,10 @@ class ConversationListView(generics.ListAPIView):
             participants=self.request.user
         ).prefetch_related(
             'participants',
-            'messages'
-        )
+            'messages',
+            'messages__sender',
+            'messages__read_by__user'
+        ).order_by('-updated_at')  # Latest chats on top
 
 class ConversationDetailView(generics.RetrieveAPIView):
     serializer_class = ConversationSerializer
