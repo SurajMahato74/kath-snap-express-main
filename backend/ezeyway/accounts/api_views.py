@@ -2380,43 +2380,30 @@ def purchase_featured_package_api(request):
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def get_sliders_api(request):
-    """Get sliders based on user type and current date/time"""
     from .models import Slider
-    
-    # Get user type from request (authenticated users) or query param
-    user_type = None
+    from django.db.models import Q
+
+    # Determine user type
     if request.user.is_authenticated:
         user_type = request.user.user_type
     else:
-        # For non-authenticated users, default to customer
         user_type = 'customer'
-    
-    # Allow override via query parameter for testing
+
+    # Allow override via query param
     requested_type = request.GET.get('user_type')
     if requested_type in ['customer', 'vendor']:
         user_type = requested_type
-    
-    # Get current time for date filtering
-    now = timezone.now()
-    
-    # Filter by date range only
+
+    # 🔥 NO DATE FILTERS
     queryset = Slider.objects.filter(
         is_active=True
     ).filter(
-        Q(start_date__isnull=True) | Q(start_date__lte=now)
-        ).filter(
-        Q(end_date__isnull=True) | Q(end_date__gte=now)
-        ).filter(
         Q(visibility='both') | Q(visibility=user_type)
-    )
+    ).order_by('display_order', 'created_at')
 
-    # Order by display order and creation date
-    queryset = queryset.order_by('display_order', 'created_at')
-    
-    # Serialize the data
     sliders_data = []
     for slider in queryset:
-        slider_data = {
+        sliders_data.append({
             'id': slider.id,
             'title': slider.title,
             'description': slider.description,
@@ -2424,18 +2411,16 @@ def get_sliders_api(request):
             'link_url': slider.link_url,
             'visibility': slider.visibility,
             'display_order': slider.display_order,
-            'start_date': slider.start_date.isoformat() if slider.start_date else None,
-            'end_date': slider.end_date.isoformat() if slider.end_date else None,
             'created_at': slider.created_at.isoformat()
-        }
-        sliders_data.append(slider_data)
-    
+        })
+
     return Response({
         'success': True,
         'sliders': sliders_data,
         'user_type': user_type,
         'count': len(sliders_data)
     })
+
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
