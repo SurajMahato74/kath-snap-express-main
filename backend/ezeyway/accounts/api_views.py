@@ -2401,12 +2401,15 @@ def get_sliders_api(request):
     
     # Filter by date range only
     queryset = Slider.objects.filter(
-        is_active=True,
-        Q(start_date__isnull=True) | Q(start_date__lte=now),
-        Q(end_date__isnull=True) | Q(end_date__gte=now),
+        is_active=True
+    ).filter(
+        Q(start_date__isnull=True) | Q(start_date__lte=now)
+        ).filter(
+        Q(end_date__isnull=True) | Q(end_date__gte=now)
+        ).filter(
         Q(visibility='both') | Q(visibility=user_type)
     )
-    
+
     # Order by display order and creation date
     queryset = queryset.order_by('display_order', 'created_at')
     
