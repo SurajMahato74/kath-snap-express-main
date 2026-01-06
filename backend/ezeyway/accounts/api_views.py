@@ -884,6 +884,36 @@ class VendorShopImageListCreateView(generics.ListCreateAPIView):
             from rest_framework import serializers as drf_serializers
             raise drf_serializers.ValidationError({'image': 'Image file is required.'})
 
+class VendorShopImageDetailView(generics.RetrieveDestroyAPIView):
+    """
+    View to retrieve or delete a specific shop image.
+    Vendors can only delete their own images.
+    """
+    serializer_class = VendorShopImageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return VendorShopImage.objects.all()
+        return VendorShopImage.objects.filter(vendor_profile__user=self.request.user)
+
+    def perform_destroy(self, instance):
+        # Delete the actual file from storage
+        try:
+            import os
+            from django.conf import settings
+            from django.core.files.storage import default_storage
+            
+            if instance.image:
+                # Assuming instance.image contains the relative path like 'shop_images/filename.ext'
+                if default_storage.exists(instance.image):
+                    default_storage.delete(instance.image)
+        except Exception as e:
+            logger.error(f"Error deleting shop image file: {str(e)}")
+            # Continue to delete DB record even if file deletion fails
+            
+        instance.delete()
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def vendor_toggle_status_api(request, pk):
