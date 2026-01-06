@@ -17,7 +17,7 @@ from rest_framework.exceptions import AuthenticationFailed
 import uuid
 
 logger = logging.getLogger(__name__)
-from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider
+from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider, FeaturedProductPackage, ProductFeaturedPurchase
 from .parameter_models import CategoryParameter, SubCategoryParameter
 from datetime import timedelta
 from .complete_onboarding_view import complete_vendor_onboarding
@@ -3748,4 +3748,182 @@ def send_call_invite_api(request):
         
     except Exception as e:
         logger.error(f"Error sending group call invite: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ---------------------------
+# Featured Package APIs
+# ---------------------------
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_featured_packages_api(request):
+    """Get list of active featured packages"""
+    packages = FeaturedProductPackage.objects.filter(is_active=True).values(
+        'id', 'name', 'duration_days', 'amount', 'package_type', 'description'
+    )
+    return Response({'packages': list(packages)})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def purchase_featured_package_api(request):
+    """Purchase a featured package for a product"""
+    try:
+        user = request.user
+        data = request.data
+        product_id = data.get('product_id')
+        package_id = data.get('package_id')
+        start_date_str = data.get('start_date')
+        
+        if not all([product_id, package_id, start_date_str]):
+            return Response({'error': 'Missing required fields'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get vendor profile
+        try:
+            vendor = VendorProfile.objects.get(user=user, is_approved=True)
+        except VendorProfile.DoesNotExist:
+            return Response({'error': 'Vendor profile not found or not active'}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Get product and verify ownership
+        try:
+            product = Product.objects.get(id=product_id, vendor=vendor)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Get package
+        try:
+            package = FeaturedProductPackage.objects.get(id=package_id, is_active=True)
+        except FeaturedProductPackage.DoesNotExist:
+            return Response({'error': 'Package not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Parse start date
+        try:
+            from datetime import datetime, date
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            if start_date < timezone.now().date():
+                return Response({'error': 'Start date cannot be in the past'}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError:
+            return Response({'error': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Calculate end date
+        end_date = start_date + timedelta(days=package.duration_days)
+        
+        # Check wallet balance
+        wallet, _ = VendorWallet.objects.get_or_create(vendor=vendor)
+        if wallet.balance < package.amount:
+            return Response({'error': 'Insufficient wallet balance'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        with transaction.atomic():
+            # Deduct from wallet
+            wallet.deduct_commission(
+                amount=package.amount,
+                order_amount=package.amount,
+                description=f"Featured package purchase: {package.name} for {product.name}"
+            )
+            
+            # Create purchase record (model imports are at top of file, assuming available)
+            purchase = ProductFeaturedPurchase.objects.create(
+                product=product,
+                vendor=vendor,
+                package=package,
+                amount_paid=package.amount,
+                start_date=start_date,
+                end_date=end_date,
+                is_active=True
+            )
+            
+            # Mark product as featured if starting today
+            if start_date <= timezone.now().date() <= end_date:
+                product.featured = True
+                product.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Package purchased successfully',
+                'new_wallet_balance': wallet.balance,
+                'end_date': end_date
+            })
+            
+    except Exception as e:
+        logger.error(f"Error buying featured package: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_product_featured_info_api(request, product_id):
+    """Get featured info and check modification rights"""
+    try:
+        product = Product.objects.get(id=product_id, vendor__user=request.user)
+        
+        # Find active purchase
+        purchase = ProductFeaturedPurchase.objects.filter(
+            product=product,
+            is_active=True,
+            end_date__gte=timezone.now().date()
+        ).order_by('-end_date').first()
+        
+        can_modify = True
+        current_purchase = None
+        
+        if purchase:
+            # Cannot modify (cancel) if already started
+            if purchase.start_date <= timezone.now().date():
+                can_modify = False
+                
+            current_purchase = {
+                'id': purchase.id,
+                'package_name': purchase.package.name,
+                'start_date': purchase.start_date,
+                'end_date': purchase.end_date
+            }
+            
+        return Response({
+            'can_modify': can_modify,
+            'current_purchase': current_purchase
+        })
+        
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def reschedule_featured_package_api(request, product_id):
+    """Reschedule a featured package start date (if not yet started)"""
+    try:
+        start_date_str = request.data.get('start_date')
+        if not start_date_str:
+            return Response({'error': 'Start date required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        from datetime import datetime
+        new_start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        if new_start_date < timezone.now().date():
+             return Response({'error': 'Start date cannot be in the past'}, status=status.HTTP_400_BAD_REQUEST)
+             
+        product = Product.objects.get(id=product_id, vendor__user=request.user)
+        
+        # Find the purchase to reschedule
+        purchase = ProductFeaturedPurchase.objects.filter(
+            product=product,
+            is_active=True,
+            start_date__gt=timezone.now().date()  # Only future ones
+        ).order_by('start_date').first()
+        
+        if not purchase:
+            return Response({'error': 'No rescheduleable package found (may have already started)'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Update dates
+        duration = (purchase.end_date - purchase.start_date).days
+        purchase.start_date = new_start_date
+        purchase.end_date = new_start_date + timedelta(days=duration)
+        purchase.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Package rescheduled',
+            'new_start_date': purchase.start_date,
+            'new_end_date': purchase.end_date
+        })
+        
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

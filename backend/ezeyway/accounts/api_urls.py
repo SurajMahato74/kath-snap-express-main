@@ -105,6 +105,12 @@ urlpatterns = [
     path('search/products/', api_views.search_products_api, name='search_products'),
     path('search/image/', api_views.image_search_api, name='image_search'),
 
+    # Featured Packages
+    path('featured-packages/', api_views.get_featured_packages_api, name='get_featured_packages'),
+    path('featured-packages/purchase/', api_views.purchase_featured_package_api, name='purchase_featured_package'),
+    path('products/<int:product_id>/featured-info/', api_views.get_product_featured_info_api, name='get_product_featured_info'),
+    path('products/<int:product_id>/reschedule-featured/', api_views.reschedule_featured_package_api, name='reschedule_featured_package'),
+
     # Admin Vendor Actions (for AJAX calls)
     path('admin/vendors/<int:vendor_id>/approve/', api_views.admin_approve_vendor_api, name='api_admin_approve_vendor'),
     path('admin/vendors/<int:vendor_id>/reject/', api_views.admin_reject_vendor_api, name='api_admin_reject_vendor'),
