@@ -416,6 +416,7 @@ class VendorDocumentSerializer(serializers.ModelSerializer):
         return None
 
 class VendorShopImageSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(write_only=True)
     image_url = serializers.SerializerMethodField()
     
     class Meta:
