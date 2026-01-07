@@ -34,6 +34,7 @@ urlpatterns = [
     path('vendor-profiles/<int:pk>/toggle-status/', api_views.vendor_toggle_status_api, name='vendor_toggle_status_detail'),
     path('complete-onboarding/', complete_onboarding_view.complete_vendor_onboarding, name='complete_onboarding'),
     path('vendor-profiles/shop-images/<int:pk>/', api_views.VendorShopImageDetailView.as_view(), name='vendor_shop_image_detail'),
+    path('vendor-profiles/<int:pk>/shop-images/', api_views.VendorProfileShopImagesView.as_view(), name='vendor_profile_shop_images'),
 
     # Vendor Orders - Dedicated endpoint for vendor orders page
     path('vendor/orders/', order_views.VendorOrderListView.as_view(), name='vendor_orders_direct'),

@@ -914,6 +914,50 @@ class VendorShopImageDetailView(generics.RetrieveDestroyAPIView):
             
         instance.delete()
 
+class VendorProfileShopImagesView(generics.ListCreateAPIView):
+    """
+    View to list all images for a specific vendor profile or upload a new one.
+    URL: /api/vendor-profiles/<int:pk>/shop-images/
+    """
+    serializer_class = VendorShopImageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        vendor_pk = self.kwargs.get('pk')
+        return VendorShopImage.objects.filter(vendor_profile_id=vendor_pk)
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        vendor_pk = self.kwargs.get('pk')
+        try:
+            # Ensure the user owns this vendor profile
+            vendor_profile = VendorProfile.objects.get(id=vendor_pk, user=self.request.user)
+        except VendorProfile.DoesNotExist:
+             from rest_framework import serializers as drf_serializers
+             from rest_framework.exceptions import PermissionDenied
+             if VendorProfile.objects.filter(id=vendor_pk).exists():
+                 raise PermissionDenied("You do not have permission to add images to this vendor profile.")
+             raise drf_serializers.ValidationError({'vendor_profile': 'Vendor profile not found.'})
+
+        # Handle file upload
+        uploaded_file = self.request.FILES.get('image')
+        if uploaded_file:
+            import os
+            from django.conf import settings
+            from django.core.files.storage import default_storage
+            
+            # Create filename
+            file_extension = os.path.splitext(uploaded_file.name)[1]
+            filename = f"shop_images/{vendor_profile.id}_{timezone.now().timestamp()}{file_extension}"
+            
+            # Save file
+            file_path = default_storage.save(filename, uploaded_file)
+            serializer.save(vendor_profile=vendor_profile, image=file_path)
+        else:
+            from rest_framework import serializers as drf_serializers
+            raise drf_serializers.ValidationError({'image': 'Image file is required.'})
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def vendor_toggle_status_api(request, pk):
