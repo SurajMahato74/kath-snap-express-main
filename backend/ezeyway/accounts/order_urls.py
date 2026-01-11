@@ -43,7 +43,7 @@ urlpatterns = [
     path('vendors/<int:vendor_id>/reviews/', order_views.get_vendor_reviews_api, name='get_vendor_reviews'),
     
     # Refund URLs
-    path('orders/<int:order_id>/refund/', order_views.request_refund_api, name='request_refund'),
+    path('<int:order_id>/refund/', order_views.request_refund_api, name='request_refund'),
     path('<int:order_id>/return/', order_views.request_return_api, name='request_return'),
     path('refunds/<int:refund_id>/appeal/', order_views.appeal_refund_api, name='appeal_refund'),
     path('refunds/<int:refund_id>/upload-document/', order_views.upload_refund_document_api, name='upload_refund_document'),
