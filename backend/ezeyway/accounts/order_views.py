@@ -684,6 +684,7 @@ def vendor_process_refund_api(request, refund_id):
                 'bank_account_number': refund.bank_account_number,
                 'bank_branch': refund.bank_branch,
                 'evidence_photos': refund.evidence_photos,
+                'vendor_supporting_docs': refund.vendor_supporting_docs,
                 'requested_at': refund.requested_at,
                 'approved_at': refund.approved_at,
                 'processed_at': refund.processed_at,
@@ -710,6 +711,12 @@ def vendor_process_refund_api(request, refund_id):
     action = request.data.get('status')  # 'approved' or 'rejected'
     admin_notes = request.data.get('admin_notes', '')
     approved_amount = request.data.get('approved_amount')
+    vendor_supporting_docs = request.data.get('vendor_supporting_docs')
+
+    # Update vendor documents if provided
+    if vendor_supporting_docs is not None:
+        refund.vendor_supporting_docs = vendor_supporting_docs
+        # Don't save yet, will be saved in specific action blocks or general save
 
     if action == 'approved':
         refund.status = 'approved'
@@ -1028,18 +1035,32 @@ def upload_refund_document_api(request, refund_id):
             saved_path = default_storage.save(file_path, file)
             file_url = default_storage.url(saved_path)
             
-            # Update evidence_photos with file info
-            evidence_photos = refund.evidence_photos or []
-            evidence_photos.append({
+            # Determine target field based on user role
+            if request.user == refund.customer:
+                target_field = 'evidence_photos'
+                current_docs = refund.evidence_photos or []
+                doc_type = 'customer_evidence'
+            else:
+                target_field = 'vendor_supporting_docs'
+                current_docs = refund.vendor_supporting_docs or []
+                doc_type = 'vendor_proof'
+
+            # Update documents list with file info
+            current_docs.append({
                 'filename': file.name,
                 'saved_filename': unique_filename,
                 'file_path': saved_path,
                 'file_url': file_url,
                 'uploaded_by': request.user.username,
                 'uploaded_at': timezone.now().isoformat(),
-                'type': 'refund_document'
+                'type': doc_type
             })
-            refund.evidence_photos = evidence_photos
+            
+            if target_field == 'evidence_photos':
+                refund.evidence_photos = current_docs
+            else:
+                refund.vendor_supporting_docs = current_docs
+                
             refund.save()
             
             return Response({

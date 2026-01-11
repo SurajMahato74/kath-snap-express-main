@@ -85,7 +85,7 @@ class OrderRefundSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'customer', 'customer_name', 'refund_type', 'status',
             'requested_amount', 'approved_amount', 'reason', 'customer_notes',
-            'admin_notes', 'evidence_photos', 'refund_method', 'esewa_number',
+            'admin_notes', 'evidence_photos', 'vendor_supporting_docs', 'refund_method', 'esewa_number',
             'khalti_number', 'bank_account_name', 'bank_account_number', 'bank_branch',
             'requested_at', 'approved_at', 'processed_at', 'completed_at', 'appeal_at',
             'processed_by', 'processed_by_name', 'customer_received_refund', 

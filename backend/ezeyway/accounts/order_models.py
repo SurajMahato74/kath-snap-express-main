@@ -322,6 +322,7 @@ class OrderRefund(models.Model):
     
     # Supporting documents
     evidence_photos = models.JSONField(default=list, blank=True)
+    vendor_supporting_docs = models.JSONField(default=list, blank=True)  # Documents uploaded by vendor during processing
     
     # Timestamps
     requested_at = models.DateTimeField(auto_now_add=True)
