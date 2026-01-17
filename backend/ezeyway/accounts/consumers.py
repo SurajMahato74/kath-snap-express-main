@@ -574,19 +574,25 @@ class CallConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def update_call_status(self, status):
         try:
+            # First try to find by call_id (string format)
             call = Call.objects.get(call_id=self.call_id)
-            call.status = status
-            from django.utils import timezone
-            if status == 'answered' and not call.answered_at:
-                call.answered_at = timezone.now()
-            elif status in ['ended', 'declined', 'rejected'] and not call.ended_at:
-                call.ended_at = timezone.now()
-                if status in ['answered', 'ended'] and call.answered_at:
-                    call.duration = (timezone.now() - call.answered_at).total_seconds()
-            call.save()
-            return True
         except Call.DoesNotExist:
-            return False
+            try:
+                # If not found, try to find by numeric id
+                call = Call.objects.get(id=int(self.call_id))
+            except (Call.DoesNotExist, ValueError):
+                return False
+        # ... rest of method
+        call.status = status
+        from django.utils import timezone
+        if status == 'answered' and not call.answered_at:
+            call.answered_at = timezone.now()
+        elif status in ['ended', 'declined', 'rejected'] and not call.ended_at:
+            call.ended_at = timezone.now()
+            if status in ['answered', 'ended'] and call.answered_at:
+                call.duration = (timezone.now() - call.answered_at).total_seconds()
+        call.save()
+        return True
             
     @database_sync_to_async
     def update_call_quality(self, quality_data):
@@ -642,25 +648,31 @@ class CallConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_call_data(self):
         try:
+            # First try to find by call_id (string format)
             call = Call.objects.get(call_id=self.call_id)
-            return {
-                'call_id': call.call_id,
-                'call_type': call.call_type,
-                'status': call.status,
-                'started_at': call.started_at.isoformat(),
-                'answered_at': call.answered_at.isoformat() if call.answered_at else None,
-                'caller': {
-                    'id': call.caller.id,
-                    'name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username
-                },
-                'callee': {
-                    'id': call.receiver.id,
-                    'name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username
-                } if call.receiver else None,
-                'participants': []
-            }
         except Call.DoesNotExist:
-            return None
+            try:
+                # If not found, try to find by numeric id
+                call = Call.objects.get(id=int(self.call_id))
+            except (Call.DoesNotExist, ValueError):
+                return None
+        # ... rest of method
+        return {
+            'call_id': call.call_id,
+            'call_type': call.call_type,
+            'status': call.status,
+            'started_at': call.started_at.isoformat(),
+            'answered_at': call.answered_at.isoformat() if call.answered_at else None,
+            'caller': {
+                'id': call.caller.id,
+                'name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username
+            },
+            'callee': {
+                'id': call.receiver.id,
+                'name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username
+            } if call.receiver else None,
+            'participants': []
+        }
     
     async def send_fcm_notification(self, status):
         """Send FCM notification for missed calls, etc."""
