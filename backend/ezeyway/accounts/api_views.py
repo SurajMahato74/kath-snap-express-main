@@ -8,6 +8,7 @@ from datetime import timedelta
 from django.views.decorators.csrf import csrf_exempt
 from decimal import Decimal
 from django.db.models import Q
+import smtplib
 from rest_framework.pagination import PageNumberPagination
 from django.db import transaction
 import math
@@ -78,12 +79,28 @@ def register_api(request):
     if serializer.is_valid():
         user = serializer.save()
         otp = user.generate_otp()
-        send_otp_email(user, otp)
-        return Response({
-            'message': 'Registration successful. OTP sent to your email.',
+
+        email_sent = False
+        try:
+            send_otp_email(user, otp)
+            email_sent = True
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"OTP email auth failed for user {user.email}: {e}")
+        except Exception as e:
+            logger.exception(f"Failed to send OTP email to {user.email}: {e}")
+
+        response = {
+            'message': 'Registration successful.',
             'user_id': user.id,
-            'email': user.email
-        }, status=status.HTTP_201_CREATED)
+            'email': user.email,
+            'otp_sent': email_sent
+        }
+
+        if not email_sent:
+            response['warning'] = 'OTP could not be sent. Please verify email settings or contact support.'
+
+        return Response(response, status=status.HTTP_201_CREATED)
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @csrf_exempt
