@@ -554,22 +554,26 @@ class CallConsumer(AsyncWebsocketConsumer):
     # Database operations
     @database_sync_to_async
     def verify_call_access(self):
+        logger.info(f"DEBUG: Looking for call_id={self.call_id} for user={self.user.id}")
         try:
             # First try to find by call_id (string format)
             call = Call.objects.get(call_id=self.call_id)
+            logger.info(f"DEBUG: Found call by call_id: {call.id}, caller={call.caller_id}, receiver={call.receiver_id}")
         except Call.DoesNotExist:
+            logger.info(f"DEBUG: Call not found by call_id, trying numeric id")
             try:
                 # If not found, try to find by numeric id
                 call = Call.objects.get(id=int(self.call_id))
-            except (Call.DoesNotExist, ValueError):
+                logger.info(f"DEBUG: Found call by id: {call.id}, caller={call.caller_id}, receiver={call.receiver_id}")
+            except (Call.DoesNotExist, ValueError) as e:
+                logger.info(f"DEBUG: Call not found by id either: {e}")
                 return False
-        
+    
         # Check if user is caller, receiver, or participant
-        if call.caller == self.user or call.receiver == self.user:
-            return True
-        if call.participants and self.user.id in call.participants:
-            return True
-        return False
+        has_access = (call.caller == self.user or call.receiver == self.user or
+                     (call.participants and self.user.id in call.participants))
+        logger.info(f"DEBUG: Access check result: {has_access}")
+        return has_access
 
     @database_sync_to_async
     def update_call_status(self, status):
