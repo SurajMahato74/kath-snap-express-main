@@ -5,6 +5,9 @@ from django.contrib.auth import get_user_model
 from .message_models import Conversation, Message, Call
 from .models import VendorProfile
 from channels.layers import get_channel_layer
+import logging
+from django.db import OperationalError
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -185,13 +188,17 @@ class MessageConsumer(AsyncWebsocketConsumer):
                 id=conversation_id,
                 participants=self.user
             )
-            message = Message.objects.create(
-                conversation=conversation,
-                sender=self.user,
-                content=content,
-                message_type='text'
-            )
-            return message
+            try:
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=self.user,
+                    content=content,
+                    message_type='text'
+                )
+                return message
+            except OperationalError as e:
+                logger.exception(f"Database error creating websocket message for user {self.user.id}: {e}")
+                return None
         except Conversation.DoesNotExist:
             return None
 

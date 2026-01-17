@@ -1282,12 +1282,18 @@ def admin_conversation(request, conversation_id):
     if request.method == 'POST':
         content = request.POST.get('content')
         if content:
-            message = Message.objects.create(
-                conversation=conversation,
-                sender=request.user,
-                content=content,
-                status='sent'
-            )
+            try:
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=request.user,
+                    content=content,
+                    status='sent'
+                )
+            except Exception as e:
+                # Catch OperationalError / charset issues when saving emojis
+                import logging
+                logging.getLogger(__name__).exception(f"DB error saving message for user {request.user.id}: {e}")
+                return JsonResponse({'error': 'Failed to save message. The database may not support emojis. Configure MySQL to use utf8mb4.'}, status=400)
             conversation.updated_at = timezone.now()
             conversation.save()
             

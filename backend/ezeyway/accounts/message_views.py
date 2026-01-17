@@ -6,6 +6,9 @@ from django.shortcuts import get_object_or_404
 from django.core.files.storage import default_storage
 from django.utils import timezone
 import os
+import logging
+from django.db import OperationalError
+logger = logging.getLogger(__name__)
 from .models import CustomUser
 from .message_models import Conversation, Message, MessageRead, Call
 from .message_serializers import (
@@ -80,12 +83,18 @@ def send_message_api(request):
             conversation.participants.add(request.user, superadmin_user)
 
         # Create message
-        message = Message.objects.create(
-            conversation=conversation,
-            sender=request.user,
-            message_type='text',
-            content=request.data.get('message', '')
-        )
+        try:
+            message = Message.objects.create(
+                conversation=conversation,
+                sender=request.user,
+                message_type='text',
+                content=request.data.get('message', '')
+            )
+        except OperationalError as e:
+            logger.exception(f"Database error creating message for user {request.user.id}: {e}")
+            return Response({
+                'error': 'Failed to save message. The database may not support 4-byte UTF-8 characters (emojis). Please configure MySQL to use utf8mb4 charset/collation.'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # Mark as read by sender
         MessageRead.objects.create(message=message, user=request.user)
@@ -150,13 +159,19 @@ def send_message_api(request):
             })
     
     # Create message
-    message = Message.objects.create(
-        conversation=conversation,
-        sender=request.user,
-        message_type=data['message_type'],
-        content=data.get('content', ''),
-        **file_data
-    )
+    try:
+        message = Message.objects.create(
+            conversation=conversation,
+            sender=request.user,
+            message_type=data['message_type'],
+            content=data.get('content', ''),
+            **file_data
+        )
+    except OperationalError as e:
+        logger.exception(f"Database error creating message for user {request.user.id}: {e}")
+        return Response({
+            'error': 'Failed to save message. The database may not support 4-byte UTF-8 characters (emojis). Please configure MySQL to use utf8mb4 charset/collation.'
+        }, status=status.HTTP_400_BAD_REQUEST)
     
     # Mark as read by sender
     MessageRead.objects.create(message=message, user=request.user)
@@ -374,12 +389,19 @@ def create_support_conversation_api(request):
     # If message is provided, create it
     message_content = request.data.get('message')
     if message_content:
-        message = Message.objects.create(
-            conversation=conversation,
-            sender=request.user,
-            message_type='text',
-            content=message_content
-        )
+        try:
+            message = Message.objects.create(
+                conversation=conversation,
+                sender=request.user,
+                message_type='text',
+                content=message_content
+            )
+        except OperationalError as e:
+            logger.exception(f"Database error creating support message for user {request.user.id}: {e}")
+            return Response({
+                'error': 'Failed to save message. The database may not support 4-byte UTF-8 characters (emojis). Please configure MySQL to use utf8mb4 charset/collation.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         # Mark as read by sender
         MessageRead.objects.create(message=message, user=request.user)
         # Update conversation timestamp
