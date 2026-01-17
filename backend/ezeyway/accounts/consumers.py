@@ -555,17 +555,21 @@ class CallConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def verify_call_access(self):
         try:
+            # First try to find by call_id (string format)
             call = Call.objects.get(call_id=self.call_id)
-            # Check if user is caller, receiver, or participant in group call
-            if call.caller == self.user:
-                return True
-            if call.receiver == self.user:
-                return True
-            if call.participants and self.user.id in call.participants:
-                return True
-            return False
         except Call.DoesNotExist:
-            return False
+            try:
+                # If not found, try to find by numeric id
+                call = Call.objects.get(id=int(self.call_id))
+            except (Call.DoesNotExist, ValueError):
+                return False
+        
+        # Check if user is caller, receiver, or participant
+        if call.caller == self.user or call.receiver == self.user:
+            return True
+        if call.participants and self.user.id in call.participants:
+            return True
+        return False
 
     @database_sync_to_async
     def update_call_status(self, status):
