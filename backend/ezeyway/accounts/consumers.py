@@ -231,14 +231,8 @@ class MessageConsumer(AsyncWebsocketConsumer):
 
 class CallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        # Debug logging
-        print(f"DEBUG: User: {self.scope['user']}")
-        print(f"DEBUG: Is anonymous: {self.scope['user'].is_anonymous}")
-        print(f"DEBUG: Query string: {self.scope.get('query_string', b'').decode()}")
-        
         self.user = self.scope["user"]
         if self.user.is_anonymous:
-            print("DEBUG: Closing connection - user is anonymous")
             await self.close()
             return
         
@@ -649,7 +643,7 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'call_id': call.call_id,
                 'call_type': call.call_type,
                 'status': call.status,
-                'initiated_at': call.initiated_at.isoformat(),
+                'started_at': call.started_at.isoformat(),
                 'answered_at': call.answered_at.isoformat() if call.answered_at else None,
                 'caller': {
                     'id': call.caller.id,
@@ -659,7 +653,7 @@ class CallConsumer(AsyncWebsocketConsumer):
                     'id': call.receiver.id,
                     'name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username
                 } if call.receiver else None,
-                'participants': call.participants or []
+                'participants': []
             }
         except Call.DoesNotExist:
             return None
