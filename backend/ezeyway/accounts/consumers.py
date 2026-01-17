@@ -231,8 +231,14 @@ class MessageConsumer(AsyncWebsocketConsumer):
 
 class CallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        # Debug logging
+        print(f"DEBUG: User: {self.scope['user']}")
+        print(f"DEBUG: Is anonymous: {self.scope['user'].is_anonymous}")
+        print(f"DEBUG: Query string: {self.scope.get('query_string', b'').decode()}")
+        
         self.user = self.scope["user"]
         if self.user.is_anonymous:
+            print("DEBUG: Closing connection - user is anonymous")
             await self.close()
             return
         
@@ -247,9 +253,18 @@ class CallConsumer(AsyncWebsocketConsumer):
             self.call_id = str(call_id_param)
             
         self.call_group_name = f"call_{self.call_id}"
-        
+
+        # Log incoming connection info for debugging
+        try:
+            logger.info("CallConsumer.connect: user=%s call_id=%s", getattr(self.user, 'id', None), self.call_id)
+        except Exception:
+            logger.exception("CallConsumer.connect: failed to log user/call_id")
+
         # Verify user is part of this call
-        if not await self.verify_call_access():
+        access = await self.verify_call_access()
+        logger.info("CallConsumer.connect: verify_call_access=%s for user=%s call_id=%s", access, getattr(self.user, 'id', None), self.call_id)
+
+        if not access:
             await self.close()
             return
         
