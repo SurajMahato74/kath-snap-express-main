@@ -60,12 +60,14 @@ class ImageProcessor:
             # Create thumbnail
             thumbnail_path = cls.create_thumbnail(img, conversation_id, user_id, unique_filename)
             
+            width, height = img.size
             return {
                 'file_url': saved_path,
                 'file_name': uploaded_file.name,
                 'thumbnail_url': thumbnail_path,
                 'file_size': output.getvalue().__len__(),
-                'dimensions': img.size
+                'image_width': width,
+                'image_height': height
             }
     
     @classmethod
