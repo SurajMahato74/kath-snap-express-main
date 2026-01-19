@@ -115,7 +115,7 @@ class WebSocketCallTester:
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/accounts/messaging/calls/initiate/",
+                    f"{self.base_url}/api/messaging/calls/initiate/",
                     headers=headers,
                     json=data
                 ) as response:
@@ -143,7 +143,7 @@ class WebSocketCallTester:
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/accounts/messaging/calls/{call_id}/answer/",
+                    f"{self.base_url}/api/messaging/calls/{call_id}/answer/",
                     headers=headers,
                     json={}
                 ) as response:
@@ -164,7 +164,7 @@ class WebSocketCallTester:
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/accounts/messaging/calls/{call_id}/end/",
+                    f"{self.base_url}/api/messaging/calls/{call_id}/end/",
                     headers=headers,
                     json={}
                 ) as response:
