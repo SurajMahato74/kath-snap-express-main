@@ -3343,18 +3343,18 @@ def search_products_api(request):
 def initiate_call_api(request):
     """Initiate a call to another user"""
     try:
-        to_user_id = request.data.get('to_user_id')
+        recipient_id = request.data.get('recipient_id')
         call_type = request.data.get('call_type', 'audio')  # 'audio' or 'video'
-        
-        if not to_user_id:
-            return Response({'error': 'to_user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
+        if not recipient_id:
+            return Response({'error': 'recipient_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         if call_type not in ['audio', 'video']:
             return Response({'error': 'call_type must be audio or video'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Get target user
         try:
-            to_user = CustomUser.objects.get(id=to_user_id)
+            to_user = CustomUser.objects.get(id=recipient_id)
         except CustomUser.DoesNotExist:
             return Response({'error': 'Target user not found'}, status=status.HTTP_404_NOT_FOUND)
         
