@@ -19,14 +19,17 @@ class MessageConsumer(AsyncWebsocketConsumer):
             return
         
         self.user_group_name = f"user_{self.user.id}"
-        
+        print(f"DEBUG: WebSocket connecting for user {self.user.id}, joining group {self.user_group_name}")
+
         # Join user group
         await self.channel_layer.group_add(
             self.user_group_name,
             self.channel_name
         )
-        
+        print(f"DEBUG: Joined group {self.user_group_name}")
+
         await self.accept()
+        print(f"DEBUG: WebSocket accepted for user {self.user.id}")
         
         # Send online status
         await self.channel_layer.group_send(
@@ -182,10 +185,12 @@ class MessageConsumer(AsyncWebsocketConsumer):
 
     async def incoming_call(self, event):
         """Handle incoming call notifications"""
+        print(f"DEBUG: Received incoming_call event for user {self.user.id}: {event}")
         await self.send(text_data=json.dumps({
             'type': 'incoming_call',
             'call': event['call']
         }))
+        print(f"DEBUG: Sent incoming_call message to WebSocket for user {self.user.id}")
 
     # Database operations
     @database_sync_to_async

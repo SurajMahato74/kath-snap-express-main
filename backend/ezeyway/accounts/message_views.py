@@ -266,7 +266,40 @@ def initiate_call_api(request):
     
     # Debug logging
     print(f"Call created: ID={call.id}, Caller={call.caller.id}, Receiver={call.receiver.id}, Status={call.status}")
-    
+
+    # Send WebSocket notification to receiver
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    channel_layer = get_channel_layer()
+    print(f"DEBUG: channel_layer = {channel_layer}")
+    if channel_layer:
+        print(f"DEBUG: Sending WebSocket notification to user_{recipient.id}")
+        async_to_sync(channel_layer.group_send)(
+            f"user_{recipient.id}",
+            {
+                'type': 'incoming_call',
+                'call': {
+                    'id': call.id,
+                    'call_id': call.call_id or str(call.id),
+                    'call_type': call.call_type,
+                    'status': call.status,
+                    'started_at': call.started_at.isoformat(),
+                    'caller': {
+                        'id': call.caller.id,
+                        'display_name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username,
+                    },
+                    'receiver': {
+                        'id': call.receiver.id,
+                        'display_name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username,
+                    }
+                }
+            }
+        )
+        print(f"DEBUG: WebSocket notification sent to user_{recipient.id}")
+    else:
+        print("DEBUG: channel_layer is None")
+
     return Response({
         'call': CallSerializer(call).data,
         'conversation_id': conversation.id
