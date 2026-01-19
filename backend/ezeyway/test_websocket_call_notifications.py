@@ -19,7 +19,7 @@ import os
 import sys
 import time
 import websockets
-import requests
+import aiohttp
 from datetime import datetime
 
 # Setup Django environment
@@ -82,18 +82,25 @@ class WebSocketCallTester:
             logger.error(f"❌ WebSocket connection failed: {e}")
             return None
 
-    def get_user_token(self, user_id):
-        """Get authentication token for user (for local testing)"""
+    async def get_user_token_async(self, user_id):
+        """Get authentication token for user (async version)"""
         try:
+            from django.db import transaction
             from rest_framework.authtoken.models import Token
-            user = get_user_model().objects.get(id=user_id)
-            token, created = Token.objects.get_or_create(user=user)
-            return token.key
+            from asgiref.sync import sync_to_async
+
+            @sync_to_async
+            def get_token():
+                user = get_user_model().objects.get(id=user_id)
+                token, created = Token.objects.get_or_create(user=user)
+                return token.key
+
+            return await get_token()
         except Exception as e:
             logger.error(f"❌ Failed to get token for user {user_id}: {e}")
             return None
 
-    def initiate_call_api(self, caller_token, recipient_id):
+    async def initiate_call_api(self, caller_token, recipient_id):
         """Initiate call via API"""
         try:
             headers = {
@@ -106,26 +113,27 @@ class WebSocketCallTester:
                 'call_type': 'audio'
             }
 
-            response = requests.post(
-                f"{self.base_url}/api/accounts/initiate-call/",
-                headers=headers,
-                json=data
-            )
-
-            logger.info(f"📞 Call initiation response: {response.status_code}")
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"✅ Call initiated: {result}")
-                return result
-            else:
-                logger.error(f"❌ Call initiation failed: {response.text}")
-                return None
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/api/accounts/initiate-call/",
+                    headers=headers,
+                    json=data
+                ) as response:
+                    logger.info(f"📞 Call initiation response: {response.status}")
+                    if response.status == 200:
+                        result = await response.json()
+                        logger.info(f"✅ Call initiated: {result}")
+                        return result
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"❌ Call initiation failed: {error_text}")
+                        return None
 
         except Exception as e:
             logger.error(f"❌ API call failed: {e}")
             return None
 
-    def answer_call_api(self, user_token, call_id):
+    async def answer_call_api(self, user_token, call_id):
         """Answer call via API"""
         try:
             headers = {
@@ -133,20 +141,20 @@ class WebSocketCallTester:
                 'Content-Type': 'application/json'
             }
 
-            response = requests.post(
-                f"{self.base_url}/api/accounts/answer-call/",
-                headers=headers,
-                json={'call_id': call_id}
-            )
-
-            logger.info(f"📞 Answer call response: {response.status_code}")
-            return response.status_code == 200
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/api/accounts/answer-call/",
+                    headers=headers,
+                    json={'call_id': call_id}
+                ) as response:
+                    logger.info(f"📞 Answer call response: {response.status}")
+                    return response.status == 200
 
         except Exception as e:
             logger.error(f"❌ Answer call failed: {e}")
             return False
 
-    def end_call_api(self, user_token, call_id):
+    async def end_call_api(self, user_token, call_id):
         """End call via API"""
         try:
             headers = {
@@ -154,14 +162,14 @@ class WebSocketCallTester:
                 'Content-Type': 'application/json'
             }
 
-            response = requests.post(
-                f"{self.base_url}/api/accounts/end-call/",
-                headers=headers,
-                json={'call_id': call_id}
-            )
-
-            logger.info(f"📞 End call response: {response.status_code}")
-            return response.status_code == 200
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/api/accounts/end-call/",
+                    headers=headers,
+                    json={'call_id': call_id}
+                ) as response:
+                    logger.info(f"📞 End call response: {response.status}")
+                    return response.status == 200
 
         except Exception as e:
             logger.error(f"❌ End call failed: {e}")
@@ -179,8 +187,8 @@ class WebSocketCallTester:
             caller_id = 1  # Adjust to actual user ID
             receiver_id = 2  # Adjust to actual user ID
 
-            caller_token = self.get_user_token(caller_id)
-            receiver_token = self.get_user_token(receiver_id)
+            caller_token = await self.get_user_token_async(caller_id)
+            receiver_token = await self.get_user_token_async(receiver_id)
 
             if not caller_token or not receiver_token:
                 logger.error("❌ Failed to get user tokens")
@@ -198,7 +206,7 @@ class WebSocketCallTester:
 
         # Initiate call
         logger.info("📞 Initiating call...")
-        call_result = self.initiate_call_api(caller_token, receiver_id)
+        call_result = await self.initiate_call_api(caller_token, receiver_id)
 
         if not call_result:
             logger.error("❌ Call initiation failed")
@@ -230,7 +238,7 @@ class WebSocketCallTester:
 
         # Answer the call
         logger.info("📞 Answering call...")
-        answer_success = self.answer_call_api(receiver_token, call_id)
+        answer_success = await self.answer_call_api(receiver_token, call_id)
 
         if not answer_success:
             logger.error("❌ Failed to answer call")
@@ -243,7 +251,7 @@ class WebSocketCallTester:
 
         # End the call
         logger.info("📞 Ending call...")
-        end_success = self.end_call_api(caller_token, call_id)
+        end_success = await self.end_call_api(caller_token, call_id)
 
         if not end_success:
             logger.error("❌ Failed to end call")
