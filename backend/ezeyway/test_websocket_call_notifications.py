@@ -115,7 +115,7 @@ class WebSocketCallTester:
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/accounts/initiate-call/",
+                    f"{self.base_url}/api/accounts/messaging/calls/initiate/",
                     headers=headers,
                     json=data
                 ) as response:
@@ -143,9 +143,9 @@ class WebSocketCallTester:
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/accounts/answer-call/",
+                    f"{self.base_url}/api/accounts/messaging/calls/{call_id}/answer/",
                     headers=headers,
-                    json={'call_id': call_id}
+                    json={}
                 ) as response:
                     logger.info(f"📞 Answer call response: {response.status}")
                     return response.status == 200
@@ -164,9 +164,9 @@ class WebSocketCallTester:
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/accounts/end-call/",
+                    f"{self.base_url}/api/accounts/messaging/calls/{call_id}/end/",
                     headers=headers,
-                    json={'call_id': call_id}
+                    json={}
                 ) as response:
                     logger.info(f"📞 End call response: {response.status}")
                     return response.status == 200
@@ -213,7 +213,8 @@ class WebSocketCallTester:
             websocket_future.cancel()
             return False
 
-        call_id = call_result.get('call_id')
+        call_data = call_result.get('call', {})
+        call_id = call_data.get('id')  # Use the call ID from the response
         logger.info(f"✅ Call initiated with ID: {call_id}")
 
         # Wait for WebSocket notification
