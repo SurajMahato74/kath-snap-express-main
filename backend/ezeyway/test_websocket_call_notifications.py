@@ -233,8 +233,8 @@ class WebSocketCallTester:
         logger.info(f"✅ Received call notification: {call_data}")
 
         # Verify call data
-        if call_data.get('call_id') != call_id:
-            logger.error(f"❌ Call ID mismatch: expected {call_id}, got {call_data.get('call_id')}")
+        if call_data.get('id') != call_id:
+            logger.error(f"❌ Call ID mismatch: expected {call_id}, got {call_data.get('id')}")
             return False
 
         # Answer the call
