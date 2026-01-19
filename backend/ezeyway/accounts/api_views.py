@@ -3404,18 +3404,28 @@ def initiate_call_api(request):
         # Send WebSocket notification if target is online
         from asgiref.sync import async_to_sync
         from channels.layers import get_channel_layer
-        
+
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(
                 f"user_{to_user.id}",
                 {
-                    'type': 'call_notification',
-                    'call_id': call_id,
-                    'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
-                    'caller_id': str(request.user.id),
-                    'call_type': call_type,
-                    'action': 'incoming_call'
+                    'type': 'incoming_call',
+                    'call': {
+                        'id': call.id,
+                        'call_id': call.call_id,
+                        'call_type': call.call_type,
+                        'status': call.status,
+                        'started_at': call.started_at.isoformat(),
+                        'caller': {
+                            'id': call.caller.id,
+                            'display_name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username,
+                        },
+                        'receiver': {
+                            'id': call.receiver.id,
+                            'display_name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username,
+                        }
+                    }
                 }
             )
         

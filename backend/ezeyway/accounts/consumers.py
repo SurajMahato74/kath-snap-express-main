@@ -180,6 +180,13 @@ class MessageConsumer(AsyncWebsocketConsumer):
             'status': event['status']
         }))
 
+    async def incoming_call(self, event):
+        """Handle incoming call notifications"""
+        await self.send(text_data=json.dumps({
+            'type': 'incoming_call',
+            'call': event['call']
+        }))
+
     # Database operations
     @database_sync_to_async
     def save_message(self, conversation_id, content):
@@ -720,23 +727,23 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         if self.user.is_anonymous:
             await self.close()
             return
-        
+
         # Check if user is a vendor or customer
         is_vendor = await self.is_vendor_user()
-        
+
         if is_vendor:
             self.user_group_name = f"vendor_notifications_{self.user.id}"
         else:
             self.user_group_name = f"customer_notifications_{self.user.id}"
-        
+
         # Join notification group
         await self.channel_layer.group_add(
             self.user_group_name,
             self.channel_name
         )
-        
+
         await self.accept()
-        
+
         # Send connection confirmation
         await self.send(text_data=json.dumps({
             'type': 'connection_established',
