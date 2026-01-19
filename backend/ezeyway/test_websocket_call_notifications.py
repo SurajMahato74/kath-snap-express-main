@@ -120,7 +120,7 @@ class WebSocketCallTester:
                     json=data
                 ) as response:
                     logger.info(f"📞 Call initiation response: {response.status}")
-                    if response.status == 200:
+                    if response.status in [200, 201]:
                         result = await response.json()
                         logger.info(f"✅ Call initiated: {result}")
                         return result
