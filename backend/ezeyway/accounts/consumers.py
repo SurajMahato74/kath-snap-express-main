@@ -388,7 +388,7 @@ class CallConsumer(AsyncWebsocketConsumer):
         
         # Send FCM notification for important status changes
         if status in ['missed', 'declined']:
-            await self.send_fcm_notification(status)
+            self.send_fcm_notification(status)
 
     async def handle_call_quality(self, data):
         """Handle call quality updates"""
@@ -687,15 +687,16 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'id': call.receiver.id,
                 'name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username
             } if call.receiver else None,
-            'participants': []
+            'participants': call.participants
         }
     
-    async def send_fcm_notification(self, status):
+    @database_sync_to_async
+    def send_fcm_notification(self, status):
         """Send FCM notification for missed calls, etc."""
         try:
             call = Call.objects.get(call_id=self.call_id)
             from .fcm_service import fcm_service
-            
+
             # Determine who should receive the notification
             if status == 'missed' and call.caller == self.user:
                 # Caller's call was missed - notify callee
@@ -705,7 +706,7 @@ class CallConsumer(AsyncWebsocketConsumer):
                 target_user = call.caller
             else:
                 return  # No notification needed
-            
+
             # Try to get FCM token
             try:
                 vendor_profile = VendorProfile.objects.get(user=target_user)
@@ -721,7 +722,7 @@ class CallConsumer(AsyncWebsocketConsumer):
                     )
             except VendorProfile.DoesNotExist:
                 pass  # Customer doesn't have vendor profile
-                
+
         except Call.DoesNotExist:
             pass
 
