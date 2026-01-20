@@ -255,33 +255,28 @@ def initiate_call_api(request):
         conversation = Conversation.objects.create()
         conversation.participants.add(request.user, recipient)
     
-    # Create call record
+    # Create call record with proper status
     call = Call.objects.create(
         conversation=conversation,
         caller=request.user,
         receiver=recipient,
         call_type=serializer.validated_data['call_type'],
-        status='ringing'
+        status='initiated'  # Start with initiated, not ringing
     )
     
-    # Debug logging
-    print(f"Call created: ID={call.id}, Caller={call.caller.id}, Receiver={call.receiver.id}, Status={call.status}")
-
-    # Send WebSocket notification to receiver
+    # Send WebSocket notification to receiver via global WebSocket
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
 
     channel_layer = get_channel_layer()
-    print(f"DEBUG: channel_layer = {channel_layer}")
     if channel_layer:
-        print(f"DEBUG: Sending WebSocket notification to user_{recipient.id}")
         async_to_sync(channel_layer.group_send)(
             f"user_{recipient.id}",
             {
                 'type': 'incoming_call',
                 'call': {
                     'id': call.id,
-                    'call_id': call.call_id or str(call.id),
+                    'call_id': call.call_id,
                     'call_type': call.call_type,
                     'status': call.status,
                     'started_at': call.started_at.isoformat(),
@@ -296,13 +291,24 @@ def initiate_call_api(request):
                 }
             }
         )
-        print(f"DEBUG: WebSocket notification sent to user_{recipient.id}")
-    else:
-        print("DEBUG: channel_layer is None")
 
+    # Return response in format expected by frontend
     return Response({
-        'call': CallSerializer(call).data,
-        'conversation_id': conversation.id
+        'call': {
+            'id': call.id,
+            'call_id': call.call_id,
+            'caller': {
+                'id': call.caller.id,
+                'display_name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username,
+            },
+            'receiver': {
+                'id': call.receiver.id,
+                'display_name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username,
+            },
+            'call_type': call.call_type,
+            'status': call.status,
+            'started_at': call.started_at.isoformat()
+        }
     }, status=status.HTTP_201_CREATED)
 
 @api_view(['POST'])
@@ -310,12 +316,28 @@ def initiate_call_api(request):
 def answer_call_api(request, call_id):
     call = get_object_or_404(Call, id=call_id, receiver=request.user)
     
-    if call.status != 'ringing':
-        return Response({'error': 'Call is not in ringing state'}, status=status.HTTP_400_BAD_REQUEST)
+    if call.status not in ['initiated', 'ringing']:
+        return Response({'error': 'Call cannot be answered'}, status=status.HTTP_400_BAD_REQUEST)
     
     call.status = 'answered'
     call.answered_at = timezone.now()
     call.save()
+    
+    # Notify caller that call was answered
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"call_{call.call_id}",
+            {
+                'type': 'call_status_update',
+                'status': 'answered',
+                'user_id': request.user.id,
+                'call_id': call.call_id
+            }
+        )
     
     return Response(CallSerializer(call).data)
 
@@ -331,6 +353,22 @@ def end_call_api(request, call_id):
     
     call.end_call()
     
+    # Notify other participant that call ended
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"call_{call.call_id}",
+            {
+                'type': 'call_status_update',
+                'status': 'ended',
+                'user_id': request.user.id,
+                'call_id': call.call_id
+            }
+        )
+    
     return Response(CallSerializer(call).data)
 
 @api_view(['POST'])
@@ -344,6 +382,22 @@ def decline_call_api(request, call_id):
     call.status = 'declined'
     call.ended_at = timezone.now()
     call.save()
+    
+    # Notify caller that call was declined
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"call_{call.call_id}",
+            {
+                'type': 'call_status_update',
+                'status': 'declined',
+                'user_id': request.user.id,
+                'call_id': call.call_id
+            }
+        )
     
     return Response(CallSerializer(call).data)
 

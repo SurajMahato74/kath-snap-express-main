@@ -284,6 +284,21 @@ class CallConsumer(AsyncWebsocketConsumer):
         
         # Send call state to connecting user
         await self.send_call_state()
+        
+        # If receiver connects and call is in 'initiated' state, update to 'ringing'
+        call = await self.get_call_object()
+        if call and call.receiver.id == self.user.id and call.status == 'initiated':
+            await self.update_call_status('ringing')
+            # Broadcast ringing status to caller
+            await self.channel_layer.group_send(
+                self.call_group_name,
+                {
+                    'type': 'call_status_update',
+                    'status': 'ringing',
+                    'user_id': self.user.id,
+                    'username': self.user.username
+                }
+            )
 
     async def disconnect(self, close_code):
         if hasattr(self, 'call_group_name'):
@@ -371,7 +386,7 @@ class CallConsumer(AsyncWebsocketConsumer):
     async def handle_call_status(self, data):
         status = data.get('status')
         
-        if status in ['answered', 'ended', 'declined', 'missed']:
+        if status in ['answered', 'ended', 'declined', 'missed', 'ringing', 'calling']:
             await self.update_call_status(status)
             
         # Broadcast status to all participants
@@ -388,7 +403,7 @@ class CallConsumer(AsyncWebsocketConsumer):
         
         # Send FCM notification for important status changes
         if status in ['missed', 'declined']:
-            self.send_fcm_notification(status)
+            await self.send_fcm_notification(status)
 
     async def handle_call_quality(self, data):
         """Handle call quality updates"""
@@ -488,7 +503,7 @@ class CallConsumer(AsyncWebsocketConsumer):
             'type': 'call_status',
             'status': event['status'],
             'user_id': event['user_id'],
-            'username': event['username'],
+            'username': event.get('username', ''),
             'timestamp': event.get('timestamp')
         }))
         
@@ -564,6 +579,20 @@ class CallConsumer(AsyncWebsocketConsumer):
         }))
 
     # Database operations
+    @database_sync_to_async
+    def get_call_object(self):
+        """Get call object from database"""
+        try:
+            # Try to find by call_id first
+            call = Call.objects.get(call_id=self.call_id)
+        except Call.DoesNotExist:
+            try:
+                # If not found, try to find by numeric id
+                call = Call.objects.get(id=int(self.call_id))
+            except (Call.DoesNotExist, ValueError):
+                return None
+        return call
+
     @database_sync_to_async
     def verify_call_access(self):
         logger.info(f"DEBUG: Looking for call_id={self.call_id} for user={self.user.id}")

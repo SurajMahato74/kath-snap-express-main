@@ -16,6 +16,7 @@ urlpatterns = [
     path('messages/<int:message_id>/image/', message_views.message_image_api, name='message_image'),
     
     # Call APIs - ACTIVE
+    path('create-call/', message_views.initiate_call_api, name='create_call'),
     path('calls/initiate/', message_views.initiate_call_api, name='initiate_call'),
     path('calls/<int:call_id>/answer/', message_views.answer_call_api, name='answer_call'),
     path('calls/<int:call_id>/end/', message_views.end_call_api, name='end_call'),
