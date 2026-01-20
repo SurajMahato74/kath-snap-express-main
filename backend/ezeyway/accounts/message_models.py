@@ -109,7 +109,8 @@ class Call(models.Model):
     
     # Additional metadata
     call_metadata = models.JSONField(blank=True, null=True, help_text='Additional call metadata')
-    
+    participants = models.JSONField(default=list, help_text='List of user IDs participating in the call')
+
     class Meta:
         ordering = ['-started_at']
     
@@ -128,6 +129,11 @@ class Call(models.Model):
         if not self.call_id:
             import time
             self.call_id = f"call_{self.caller.id}_{self.receiver.id}_{int(time.time())}"
+
+        # Initialize participants if empty
+        if not self.participants:
+            self.participants = [self.caller.id, self.receiver.id]
+
         super().save(*args, **kwargs)
     
     def end_call(self):
