@@ -22,15 +22,13 @@ class AgoraTokenGenerator:
         current_time = int(time.time())
         privilege_expire_ts = current_time + expire_sec
         
-        # Use role constants from RtcTokenBuilder
-        agora_role = RtcTokenBuilder.RolePublisher if role == 1 else RtcTokenBuilder.RoleSubscriber
-        
+        # Use numeric role values (1=Publisher, 2=Subscriber)
         token = RtcTokenBuilder.build_token_with_uid(
             app_id=self.app_id,
             app_certificate=self.app_certificate,
             channel_name=str(channel_name),
             uid=int(uid),
-            role=agora_role,
+            role=role,
             privilege_expire_ts=privilege_expire_ts
         )
         return token
