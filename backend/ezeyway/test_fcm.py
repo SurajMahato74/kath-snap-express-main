@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 """
-Call System Test - Production Ready
-
-Quick test to verify call notifications are working.
-Run: python test_calls.py
+Simple Call Test - Send FCM notifications to test devices
 """
 
 import os
@@ -17,25 +14,23 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezeyway.settings')
 django.setup()
 
 from accounts.models import VendorProfile
-from accounts.websocket_fallback import send_call_with_fallback
+from accounts.fcm_service import fcm_service
 
-def test_call_notifications():
-    """Send test call notifications to all active devices"""
-    print("📞 Testing Call Notifications...")
+def test_fcm_calls():
+    """Send FCM call notifications directly"""
+    print("📞 Sending Call Notifications...")
     
-    # Get users with FCM tokens
     profiles = VendorProfile.objects.filter(
         fcm_token__isnull=False,
         fcm_token__gt=''
     ).select_related('user')
     
     if not profiles:
-        print("❌ No devices with FCM tokens found")
+        print("❌ No devices found")
         return
     
-    print(f"📱 Found {len(profiles)} devices")
+    print(f"📱 Testing {len(profiles)} devices")
     
-    # Send test call to each device
     test_call_id = f"test_{uuid.uuid4().hex[:8]}"
     
     for profile in profiles:
@@ -43,15 +38,14 @@ def test_call_notifications():
             'call_id': test_call_id,
             'caller_name': 'Test Call',
             'caller_id': '999',
-            'call_type': 'audio',
-            'force_fcm': True  # Force FCM for testing
+            'call_type': 'audio'
         }
         
-        success = send_call_with_fallback(profile.user.id, call_data)
+        success = fcm_service.send_call_notification(profile.fcm_token, call_data)
         status = "✅" if success else "❌"
         print(f"{status} {profile.user.username}")
     
-    print("\n🎉 Test complete! Check your mobile devices.")
+    print("\n🎉 Done! Check your phones.")
 
 if __name__ == "__main__":
-    test_call_notifications()
+    test_fcm_calls()

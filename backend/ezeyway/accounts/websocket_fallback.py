@@ -44,8 +44,8 @@ def send_call_with_fallback(user_id, call_data):
         
     # Fallback to FCM - send in frontend-compatible format
     try:
-        from .models import User, VendorProfile
-        user = User.objects.get(id=user_id)
+        from .models import CustomUser, VendorProfile
+        user = CustomUser.objects.get(id=user_id)
         
         # Try to get FCM token from VendorProfile first
         fcm_token = None
