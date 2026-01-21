@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import parameter_ajax_views
 from . import call_api_views
+from . import call_actions_api
 from django.views.decorators.csrf import csrf_exempt
 
 urlpatterns = [
@@ -25,6 +26,9 @@ urlpatterns = [
     
     # Call APIs - Frontend Compatible
     path('calls/create/', call_api_views.create_call_api, name='create_call_api'),
+    path('calls/<str:call_id>/accept/', call_actions_api.accept_call_api, name='accept_call_api'),
+    path('calls/<str:call_id>/reject/', call_actions_api.reject_call_api, name='reject_call_api'),
+    path('calls/<str:call_id>/end/', call_actions_api.end_call_api, name='end_call_api'),
     path('fcm-token/update/', call_api_views.update_fcm_token_api, name='update_fcm_token_api'),
     
     # Superadmin
