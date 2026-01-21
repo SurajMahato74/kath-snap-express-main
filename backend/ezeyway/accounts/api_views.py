@@ -3371,68 +3371,30 @@ def initiate_call_api(request):
             initiated_at=timezone.now()
         )
         
-        # Send FCM notification to callee
-        try:
-            to_vendor_profile = VendorProfile.objects.get(user=to_user)
-            if to_vendor_profile.fcm_token:
-                from .fcm_service import fcm_service
-                fcm_service.send_call_notification(
-                    token=to_vendor_profile.fcm_token,
-                    call_data={
-                        'call_id': call_id,
-                        'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
-                        'caller_id': str(request.user.id),
-                        'call_type': call_type,
-                        'action': 'incoming_call'
-                    }
-                )
-        except VendorProfile.DoesNotExist:
-            # Customer doesn't have vendor profile, try to find FCM token in user model
-            if hasattr(request.user, 'fcm_token') and request.user.fcm_token:
-                from .fcm_service import fcm_service
-                fcm_service.send_call_notification(
-                    token=request.user.fcm_token,
-                    call_data={
-                        'call_id': call_id,
-                        'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
-                        'caller_id': str(request.user.id),
-                        'call_type': call_type,
-                        'action': 'incoming_call'
-                    }
-                )
+        # Use WebSocket fallback mechanism
+        from .websocket_fallback import send_call_with_fallback
         
-        # Send WebSocket notification if target is online
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer:
-            async_to_sync(channel_layer.group_send)(
-                f"user_{to_user.id}",
-                {
-                    'type': 'incoming_call',
-                    'call': {
-                        'id': call.id,
-                        'call_id': call.call_id,
-                        'call_type': call.call_type,
-                        'status': call.status,
-                        'started_at': call.started_at.isoformat(),
-                        'caller': {
-                            'id': call.caller.id,
-                            'display_name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username,
-                        },
-                        'receiver': {
-                            'id': call.receiver.id,
-                            'display_name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username,
-                        }
-                    }
-                }
-            )
+        call_data = {
+            'call_id': call_id,
+            'caller_name': f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+            'caller_id': str(request.user.id),
+            'call_type': call_type,
+            'action': 'incoming_call'
+        }
+        
+        # Send call notification with fallback
+        success = send_call_with_fallback(to_user.id, call_data)
+        
+        if success:
+            logger.info(f"✅ Call notification sent successfully to user {to_user.id}")
+        else:
+            logger.warning(f"⚠️ Call notification failed for user {to_user.id}")
         
         return Response({
             'success': True,
             'call_id': call_id,
             'status': 'initiated',
+            'notification_sent': success,
             'message': 'Call initiated successfully'
         })
         
@@ -3798,39 +3760,37 @@ def send_call_invite_api(request):
         call = Call.objects.create(
             call_id=call_id,
             caller=request.user,
-            callee=None,  # Group call
+            receiver=None,  # Group call
             call_type=call_type,
             status='initiated',
             initiated_at=timezone.now(),
-            participants=request.user.id  # Creator is first participant
+            participants=[request.user.id]  # Creator is first participant
         )
         
-        # Add other participants
+        # Use WebSocket fallback for each participant
+        from .websocket_fallback import send_call_with_fallback
+        
         participant_list = [request.user.id]
+        successful_invites = 0
+        
         for user_id in user_ids:
             try:
                 user = CustomUser.objects.get(id=user_id)
                 participant_list.append(user_id)
                 
-                # Send FCM notification to each participant
-                try:
-                    user_vendor_profile = VendorProfile.objects.get(user=user)
-                    if user_vendor_profile.fcm_token:
-                        from .fcm_service import fcm_service
-                        fcm_service.send_call_notification(
-                            token=user_vendor_profile.fcm_token,
-                            call_data={
-                                'call_id': call_id,
-                                'caller_name': f"{request.user.first_name} {request.user.last_name}".strip(),
-                                'caller_id': str(request.user.id),
-                                'call_type': call_type,
-                                'is_group_call': True,
-                                'participant_count': len(participant_list),
-                                'action': 'incoming_group_call'
-                            }
-                        )
-                except VendorProfile.DoesNotExist:
-                    pass
+                call_data = {
+                    'call_id': call_id,
+                    'caller_name': f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    'caller_id': str(request.user.id),
+                    'call_type': call_type,
+                    'is_group_call': True,
+                    'participant_count': len(participant_list),
+                    'action': 'incoming_group_call'
+                }
+                
+                # Send call notification with fallback
+                if send_call_with_fallback(user_id, call_data):
+                    successful_invites += 1
                     
             except CustomUser.DoesNotExist:
                 logger.warning(f"User {user_id} not found for group call invite")
@@ -3844,6 +3804,7 @@ def send_call_invite_api(request):
             'call_id': call_id,
             'status': 'initiated',
             'participant_count': len(participant_list),
+            'successful_invites': successful_invites,
             'message': 'Group call initiated successfully'
         })
         

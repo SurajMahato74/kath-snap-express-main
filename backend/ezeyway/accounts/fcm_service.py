@@ -238,5 +238,19 @@ class FCMService:
             logger.error(f"Bulk FCM failed: {e}")
             return False
 
+    def send_call_with_websocket_fallback(self, user_fcm_token, websocket_connection, call_data):
+        """Try WebSocket first, fallback to FCM"""
+        try:
+            # Try WebSocket first
+            if websocket_connection and hasattr(websocket_connection, 'send'):
+                websocket_connection.send(call_data)
+                logger.info("Call sent via WebSocket")
+                return True
+        except Exception as e:
+            logger.warning(f"WebSocket failed, using FCM: {e}")
+        
+        # Fallback to FCM
+        return self.send_call_notification(user_fcm_token, call_data)
+
 # Global singleton
 fcm_service = FCMService()

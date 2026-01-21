@@ -542,14 +542,10 @@ class CallConsumer(AsyncWebsocketConsumer):
 
     # Call notification handlers for API-triggered events
     async def call_notification(self, event):
-        """Handle call notifications from API"""
+        """Handle call notifications from API - frontend compatible format"""
         await self.send(text_data=json.dumps({
-            'type': 'incoming_call',
-            'call_id': event['call_id'],
-            'caller_name': event['caller_name'],
-            'caller_id': event['caller_id'],
-            'call_type': event['call_type'],
-            'action': event['action']
+            'type': 'call_notification',
+            'call': event['call']
         }))
         
     async def call_answered(self, event):

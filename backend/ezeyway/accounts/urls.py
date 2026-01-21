@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import parameter_ajax_views
+from . import call_api_views
 from django.views.decorators.csrf import csrf_exempt
 
 urlpatterns = [
@@ -21,6 +22,10 @@ urlpatterns = [
     # OTP System
     path('send-otp/', views.send_otp, name='send_otp'),
     path('verify-otp/', views.verify_otp, name='verify_otp'),
+    
+    # Call APIs - Frontend Compatible
+    path('calls/create/', call_api_views.create_call_api, name='create_call_api'),
+    path('fcm-token/update/', call_api_views.update_fcm_token_api, name='update_fcm_token_api'),
     
     # Superadmin
     path('superadmin/', views.superadmin_dashboard, name='superadmin_dashboard'),
