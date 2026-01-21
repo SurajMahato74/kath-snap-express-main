@@ -646,6 +646,16 @@ class CallConsumer(AsyncWebsocketConsumer):
             'rejecter_name': event['rejecter_name']
         }))
         
+    async def call_notification(self, event):
+        """Handle generic call notifications"""
+        await self.send(text_data=json.dumps({
+            'type': 'call_notification',
+            'call_id': event.get('call_id'),
+            'message': event.get('message'),
+            'notification_type': event.get('notification_type'),
+            'data': event.get('data', {})
+        }))
+        
     async def call_ended(self, event):
         """Handle call ended notifications"""
         await self.send(text_data=json.dumps({
