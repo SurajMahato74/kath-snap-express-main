@@ -70,7 +70,23 @@ def reject_call_api(request, call_id):
         call.duration = 0
         call.save()
         
-        # Notify caller via WebSocket/FCM
+        # Real-time broadcast to call group
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"call_{call_id}",
+                {
+                    'type': 'call_rejected',
+                    'call_id': call_id,
+                    'rejecter_id': request.user.id,
+                    'rejecter_name': f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                }
+            )
+        
+        # Fallback notification for offline users
         from .websocket_fallback import send_call_with_fallback
         
         notification_data = {

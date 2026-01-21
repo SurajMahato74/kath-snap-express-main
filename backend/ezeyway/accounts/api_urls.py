@@ -5,6 +5,7 @@ from . import complete_onboarding_view
 from . import fcm_test_views
 from . import call_api_views
 from . import call_actions_api
+from . import call_status_api
 
 urlpatterns = [
     # Authentication
@@ -34,6 +35,10 @@ urlpatterns = [
     path('calls/<str:call_id>/accept/', call_actions_api.accept_call_api, name='accept_call_api'),
     path('calls/<str:call_id>/reject/', call_actions_api.reject_call_api, name='reject_call_api'),
     path('calls/<str:call_id>/end/', call_actions_api.end_call_api, name='end_call_api'),
+    path('calls/<str:call_id>/status/', call_status_api.get_call_status_api, name='get_call_status_api'),
+    path('calls/<str:call_id>/sync/', call_status_api.sync_call_status_api, name='sync_call_status_api'),
+    path('calls/<str:call_id>/reconnect/', call_status_api.reconnect_call_api, name='reconnect_call_api'),
+    path('agora-token/', call_api_views.generate_agora_token_api, name='generate_agora_token_api'),
     path('update-fcm-token/', call_api_views.update_fcm_token_api, name='update_fcm_token_api'),
 
     # Role Switching

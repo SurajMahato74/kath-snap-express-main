@@ -7,6 +7,7 @@ from .models import VendorProfile
 from channels.layers import get_channel_layer
 import logging
 from django.db import OperationalError
+from .call_state_manager import call_state_manager
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
@@ -257,6 +258,7 @@ class CallConsumer(AsyncWebsocketConsumer):
             return
             
         self.user_group_name = f"call_user_{self.user.id}"
+        # Don't set call_group_name yet - wait for join_call message
 
         # Join user call group
         await self.channel_layer.group_add(
@@ -265,7 +267,7 @@ class CallConsumer(AsyncWebsocketConsumer):
         )
         
         await self.accept()
-        logger.info(f"CallConsumer connected for user {self.user.id}")
+        logger.info(f"CallConsumer connected for user {self.user.id} - awaiting join_call")
 
     async def disconnect(self, close_code):
         if hasattr(self, 'user_group_name'):
@@ -273,33 +275,60 @@ class CallConsumer(AsyncWebsocketConsumer):
                 self.user_group_name,
                 self.channel_name
             )
-            logger.info(f"CallConsumer disconnected for user {self.user.id}")
+            
+        if hasattr(self, 'call_group_name'):
+            await self.channel_layer.group_discard(
+                self.call_group_name,
+                self.channel_name
+            )
+            logger.info(f"User {self.user.id} left call group on disconnect: {self.call_group_name}")
+            
+        # Handle disconnect with reconnection logic
+        if hasattr(self, 'call_id') and self.call_id:
+            call_state_manager.handle_disconnect(self.call_id, self.user.id)
+            
+        logger.info(f"CallConsumer disconnected for user {self.user.id}")
 
     async def receive(self, text_data):
         try:
             data = json.loads(text_data)
             signal_type = data.get('type')
             
-            if signal_type == 'offer':
-                await self.handle_offer(data)
-            elif signal_type == 'answer':
-                await self.handle_answer(data)
-            elif signal_type == 'ice_candidate':
-                await self.handle_ice_candidate(data)
-            elif signal_type == 'call_status':
-                await self.handle_call_status(data)
+            if signal_type == 'join_call':
+                await self.handle_join_call(data)
+            elif signal_type in ['offer', 'answer', 'ice_candidate', 'toggle_media', 'call_status']:
+                if not hasattr(self, 'call_group_name'):
+                    await self.send(text_data=json.dumps({
+                        'error': 'Must join_call first',
+                        'type': 'error'
+                    }))
+                    return
+                    
+                if signal_type == 'offer':
+                    await self.handle_offer(data)
+                elif signal_type == 'answer':
+                    await self.handle_answer(data)
+                elif signal_type == 'ice_candidate':
+                    await self.handle_ice_candidate(data)
+                elif signal_type == 'toggle_media':
+                    await self.handle_toggle_media(data)
+                elif signal_type == 'call_status':
+                    await self.handle_call_status(data)
             elif signal_type == 'call_quality':
                 await self.handle_call_quality(data)
-            elif signal_type == 'join_call':
-                await self.handle_join_call(data)
             elif signal_type == 'leave_call':
                 await self.handle_leave_call(data)
-            elif signal_type == 'toggle_media':
-                await self.handle_toggle_media(data)
+            elif signal_type == 'request_agora_token':
+                await self.handle_agora_token_request(data)
+            elif signal_type == 'sync_call_state':
+                await self.handle_call_state_sync(data)
+            elif signal_type == 'heartbeat':
+                await self.handle_heartbeat(data)
                 
         except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
-                'error': 'Invalid JSON'
+                'error': 'Invalid JSON',
+                'type': 'error'
             }))
 
     async def handle_offer(self, data):
@@ -385,7 +414,29 @@ class CallConsumer(AsyncWebsocketConsumer):
 
     async def handle_join_call(self, data):
         """Handle user joining an active call"""
-        # Broadcast user joined to other participants
+        call_id = data.get('call_id')
+        if not call_id:
+            await self.send(text_data=json.dumps({
+                'error': 'Missing call_id in join_call',
+                'type': 'error'
+            }))
+            return
+            
+        self.call_id = call_id
+        self.call_group_name = f"call_{call_id}"
+        
+        # Join call group
+        await self.channel_layer.group_add(
+            self.call_group_name,
+            self.channel_name
+        )
+        
+        logger.info(f"User {self.user.id} joined call group: {self.call_group_name}")
+        
+        # Handle reconnection logic
+        call_state_manager.handle_reconnect(self.call_id, self.user.id)
+        
+        # Notify others that user joined
         await self.channel_layer.group_send(
             self.call_group_name,
             {
@@ -396,21 +447,34 @@ class CallConsumer(AsyncWebsocketConsumer):
             }
         )
         
-        # Update call participants list if this is a group call
-        await self.update_call_participants()
+        # Send join confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'join_call_success',
+            'call_id': call_id,
+            'user_id': self.user.id
+        }))
 
     async def handle_leave_call(self, data):
         """Handle user leaving the call"""
-        # Broadcast user left to other participants
-        await self.channel_layer.group_send(
-            self.call_group_name,
-            {
-                'type': 'user_left_call',
-                'user_id': self.user.id,
-                'username': self.user.username,
-                'reason': data.get('reason', 'normal')
-            }
-        )
+        if hasattr(self, 'call_group_name'):
+            # Remove from call group
+            await self.channel_layer.group_discard(
+                self.call_group_name,
+                self.channel_name
+            )
+            
+            # Broadcast user left to other participants
+            await self.channel_layer.group_send(
+                self.call_group_name,
+                {
+                    'type': 'user_left_call',
+                    'user_id': self.user.id,
+                    'username': self.user.username,
+                    'reason': data.get('reason', 'normal')
+                }
+            )
+            
+            logger.info(f"User {self.user.id} left call group: {self.call_group_name}")
         
         # Update call status if all users left
         await self.check_call_termination()
@@ -427,6 +491,42 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'username': self.user.username
             }
         )
+
+    async def handle_agora_token_request(self, data):
+        """Handle Agora token generation request"""
+        channel_name = data.get('channel_name', self.call_id)
+        uid = data.get('uid', self.user.id)
+        
+        # Generate token
+        token_data = await self.generate_agora_token(channel_name, uid)
+        
+        if token_data:
+            await self.send(text_data=json.dumps({
+                'type': 'agora_token',
+                'token': token_data['token'],
+                'channel_name': channel_name,
+                'uid': uid,
+                'app_id': token_data['app_id']
+            }))
+        else:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Failed to generate Agora token'
+            }))
+
+    async def handle_call_state_sync(self, data):
+        """Handle call state synchronization request"""
+        if hasattr(self, 'call_id') and self.call_id:
+            status = data.get('status')
+            if status:
+                call_state_manager.sync_call_state(self.call_id, self.user.id, status)
+
+    async def handle_heartbeat(self, data):
+        """Handle heartbeat to maintain connection"""
+        await self.send(text_data=json.dumps({
+            'type': 'heartbeat_ack',
+            'timestamp': data.get('timestamp')
+        }))
 
     # WebSocket message handlers
     async def webrtc_offer(self, event):
@@ -498,6 +598,26 @@ class CallConsumer(AsyncWebsocketConsumer):
             'username': event['username']
         }))
 
+    async def call_state_sync(self, event):
+        """Handle call state synchronization"""
+        await self.send(text_data=json.dumps({
+            'type': 'call_state_sync',
+            'call_id': event['call_id'],
+            'status': event['status'],
+            'updated_by': event['updated_by'],
+            'timestamp': event['timestamp']
+        }))
+
+    async def call_state_restore(self, event):
+        """Handle call state restoration after reconnect"""
+        await self.send(text_data=json.dumps({
+            'type': 'call_state_restore',
+            'call_id': event['call_id'],
+            'status': event['status'],
+            'participants': event['participants'],
+            'duration': event['duration']
+        }))
+
     # Call notification handlers for API-triggered events
     async def incoming_call(self, event):
         """Handle incoming call notifications - main handler"""
@@ -522,6 +642,7 @@ class CallConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'call_rejected',
             'call_id': event['call_id'],
+            'rejecter_id': event['rejecter_id'],
             'rejecter_name': event['rejecter_name']
         }))
         
@@ -621,12 +742,16 @@ class CallConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def check_call_termination(self):
         try:
+            if not hasattr(self, 'call_id') or not self.call_id:
+                return False
+                
             call = Call.objects.get(call_id=self.call_id)
-            # If this was a group call, check if all users left
+            
+            # For group calls, check if all users left
             if call.participants and len(call.participants) > 1:
-                # For group calls, don't auto-terminate
-                return True
-            # For individual calls, check if both parties have left
+                return True  # Don't auto-terminate group calls
+            
+            # For individual calls, terminate when user leaves
             from django.utils import timezone
             call.ended_at = timezone.now()
             call.status = 'ended'
@@ -635,6 +760,9 @@ class CallConsumer(AsyncWebsocketConsumer):
             call.save()
             return True
         except Call.DoesNotExist:
+            return False
+        except Exception as e:
+            logger.error(f"Error in check_call_termination: {e}")
             return False
     
     async def send_call_state(self):
@@ -710,6 +838,24 @@ class CallConsumer(AsyncWebsocketConsumer):
 
         except Call.DoesNotExist:
             pass
+
+    @database_sync_to_async
+    def generate_agora_token(self, channel_name, uid):
+        """Generate Agora token for WebSocket request"""
+        try:
+            from .agora_service import AgoraTokenGenerator
+            token_generator = AgoraTokenGenerator()
+            token = token_generator.generate_channel_token(channel_name, uid)
+            
+            if token:
+                return {
+                    'token': token,
+                    'app_id': token_generator.app_id
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Agora token generation error: {e}")
+            return None
 
 
 class UserConsumer(AsyncWebsocketConsumer):

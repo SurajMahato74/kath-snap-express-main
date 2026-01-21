@@ -264,6 +264,17 @@ def initiate_call_api(request):
         status='initiated'  # Start with initiated, not ringing
     )
     
+    # Generate Agora token for caller
+    from .agora_service import AgoraTokenGenerator
+    try:
+        token_generator = AgoraTokenGenerator()
+        agora_token = token_generator.generate_channel_token(call.call_id, request.user.id)
+        agora_app_id = token_generator.app_id
+    except Exception as e:
+        logger.error(f"Failed to generate Agora token: {e}")
+        agora_token = None
+        agora_app_id = None
+    
     # Send WebSocket notification to receiver via global WebSocket
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
@@ -287,7 +298,10 @@ def initiate_call_api(request):
                     'receiver': {
                         'id': call.receiver.id,
                         'display_name': f"{call.receiver.first_name} {call.receiver.last_name}".strip() or call.receiver.username,
-                    }
+                    },
+                    'agora_token': agora_token,
+                    'agora_channel': call.call_id,
+                    'agora_app_id': agora_app_id
                 }
             }
         )
@@ -324,7 +338,10 @@ def initiate_call_api(request):
             },
             'call_type': call.call_type,
             'status': call.status,
-            'started_at': call.started_at.isoformat()
+            'started_at': call.started_at.isoformat(),
+            'agora_token': agora_token,
+            'agora_channel': call.call_id,
+            'agora_app_id': agora_app_id
         }
     }, status=status.HTTP_201_CREATED)
 
@@ -340,6 +357,17 @@ def answer_call_api(request, call_id):
     call.answered_at = timezone.now()
     call.save()
     
+    # Generate Agora tokens for both users
+    from .agora_service import AgoraTokenGenerator
+    try:
+        token_generator = AgoraTokenGenerator()
+        receiver_token = token_generator.generate_channel_token(call.call_id, request.user.id)
+        caller_token = token_generator.generate_channel_token(call.call_id, call.caller.id)
+        agora_app_id = token_generator.app_id
+    except Exception as e:
+        logger.error(f"Failed to generate Agora tokens: {e}")
+        receiver_token = caller_token = agora_app_id = None
+    
     # Notify caller that call was answered
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
@@ -352,11 +380,22 @@ def answer_call_api(request, call_id):
                 'type': 'call_status_update',
                 'status': 'answered',
                 'user_id': request.user.id,
-                'call_id': call.call_id
+                'call_id': call.call_id,
+                'agora_token_caller': caller_token,
+                'agora_channel': call.call_id,
+                'agora_app_id': agora_app_id
             }
         )
     
-    return Response(CallSerializer(call).data)
+    # Return response with token for receiver
+    response_data = CallSerializer(call).data
+    response_data.update({
+        'agora_token': receiver_token,
+        'agora_channel': call.call_id,
+        'agora_app_id': agora_app_id
+    })
+    
+    return Response(response_data)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
