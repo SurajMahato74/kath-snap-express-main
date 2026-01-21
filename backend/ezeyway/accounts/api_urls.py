@@ -3,6 +3,8 @@ from . import api_views
 from . import order_views
 from . import complete_onboarding_view
 from . import fcm_test_views
+from . import call_api_views
+from . import call_actions_api
 
 urlpatterns = [
     # Authentication
@@ -26,6 +28,13 @@ urlpatterns = [
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
     path('fcm-token/update/', fcm_test_views.update_fcm_token, name='update_fcm_token_main'),
+
+    # Call APIs - Frontend Compatible
+    path('create-call/', call_api_views.create_call_api, name='create_call_api'),
+    path('calls/<str:call_id>/accept/', call_actions_api.accept_call_api, name='accept_call_api'),
+    path('calls/<str:call_id>/reject/', call_actions_api.reject_call_api, name='reject_call_api'),
+    path('calls/<str:call_id>/end/', call_actions_api.end_call_api, name='end_call_api'),
+    path('update-fcm-token/', call_api_views.update_fcm_token_api, name='update_fcm_token_api'),
 
     # Role Switching
     path('switch-role/', api_views.switch_role_api, name='switch_role'),
