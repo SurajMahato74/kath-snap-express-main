@@ -248,74 +248,32 @@ class CallConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
         
-        # Support both string call_id and integer call_id from URL
-        call_id_param = self.scope['url_route']['kwargs'].get('call_id')
+        # Get user_id from URL route
+        self.user_id = self.scope['url_route']['kwargs'].get('user_id')
         
-        # Handle string call_id (from new implementation)
-        if isinstance(call_id_param, str):
-            self.call_id = call_id_param
-        else:
-            # Convert integer call_id to string for compatibility
-            self.call_id = str(call_id_param)
-            
-        self.call_group_name = f"call_{self.call_id}"
-
-        # Log incoming connection info for debugging
-        try:
-            logger.info("CallConsumer.connect: user=%s call_id=%s", getattr(self.user, 'id', None), self.call_id)
-        except Exception:
-            logger.exception("CallConsumer.connect: failed to log user/call_id")
-
-        # Verify user is part of this call
-        access = await self.verify_call_access()
-        logger.info("CallConsumer.connect: verify_call_access=%s for user=%s call_id=%s", access, getattr(self.user, 'id', None), self.call_id)
-
-        if not access:
+        # Verify this is the correct user
+        if str(self.user.id) != str(self.user_id):
             await self.close()
             return
-        
-        # Join call group
+            
+        self.user_group_name = f"call_user_{self.user.id}"
+
+        # Join user call group
         await self.channel_layer.group_add(
-            self.call_group_name,
+            self.user_group_name,
             self.channel_name
         )
         
         await self.accept()
-        
-        # Send call state to connecting user
-        await self.send_call_state()
-        
-        # If receiver connects and call is in 'initiated' state, update to 'ringing'
-        call = await self.get_call_object()
-        if call and call.receiver.id == self.user.id and call.status == 'initiated':
-            await self.update_call_status('ringing')
-            # Broadcast ringing status to caller
-            await self.channel_layer.group_send(
-                self.call_group_name,
-                {
-                    'type': 'call_status_update',
-                    'status': 'ringing',
-                    'user_id': self.user.id,
-                    'username': self.user.username
-                }
-            )
+        logger.info(f"CallConsumer connected for user {self.user.id}")
 
     async def disconnect(self, close_code):
-        if hasattr(self, 'call_group_name'):
+        if hasattr(self, 'user_group_name'):
             await self.channel_layer.group_discard(
-                self.call_group_name,
+                self.user_group_name,
                 self.channel_name
             )
-            
-            # Send user left notification
-            await self.channel_layer.group_send(
-                self.call_group_name,
-                {
-                    'type': 'user_left_call',
-                    'user_id': self.user.id,
-                    'username': self.user.username
-                }
-            )
+            logger.info(f"CallConsumer disconnected for user {self.user.id}")
 
     async def receive(self, text_data):
         try:
@@ -541,20 +499,22 @@ class CallConsumer(AsyncWebsocketConsumer):
         }))
 
     # Call notification handlers for API-triggered events
-    async def call_notification(self, event):
-        """Handle call notifications from API - frontend compatible format"""
+    async def incoming_call(self, event):
+        """Handle incoming call notifications - main handler"""
         await self.send(text_data=json.dumps({
-            'type': 'call_notification',
-            'call': event['call']
+            'type': 'incoming_call',
+            'call_id': event['call_id'],
+            'caller_name': event['caller_name'],
+            'caller_id': event['caller_id'],
+            'call_type': event['call_type']
         }))
         
-    async def call_answered(self, event):
-        """Handle call answered notifications"""
+    async def call_accepted(self, event):
+        """Handle call accepted notifications"""
         await self.send(text_data=json.dumps({
-            'type': 'call_answered',
+            'type': 'call_accepted',
             'call_id': event['call_id'],
-            'callee_name': event['callee_name'],
-            'callee_id': event['callee_id']
+            'accepter_name': event['accepter_name']
         }))
         
     async def call_rejected(self, event):
@@ -562,7 +522,7 @@ class CallConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'call_rejected',
             'call_id': event['call_id'],
-            'rejected_by': event['rejected_by']
+            'rejecter_name': event['rejecter_name']
         }))
         
     async def call_ended(self, event):

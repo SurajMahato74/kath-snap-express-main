@@ -4,6 +4,6 @@ from . import consumers
 websocket_urlpatterns = [
     re_path(r'ws/messages/$', consumers.MessageConsumer.as_asgi()),
     re_path(r'ws/user/$', consumers.UserConsumer.as_asgi()),
-    re_path(r'ws/calls/(?P<call_id>[\w_]+)/$', consumers.CallConsumer.as_asgi()),
+    re_path(r'ws/calls/(?P<user_id>[\w_]+)/$', consumers.CallConsumer.as_asgi()),
     re_path(r'ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
 ]
