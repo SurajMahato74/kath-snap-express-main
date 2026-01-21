@@ -30,8 +30,20 @@ class Command(BaseCommand):
         # Test token generation
         try:
             generator = AgoraTokenGenerator()
+            
+            # Show available methods for debugging
+            try:
+                from agora_token_builder import RtcTokenBuilder
+                methods = [method for method in dir(RtcTokenBuilder) if not method.startswith('_')]
+                self.stdout.write(f"📋 Available RtcTokenBuilder methods: {methods}")
+            except Exception as e:
+                self.stdout.write(f"⚠️ Could not inspect RtcTokenBuilder: {e}")
+            
             token = generator.generate_channel_token("test_channel", 123)
             self.stdout.write(self.style.SUCCESS(f"✅ Token generated successfully: {token[:20]}..."))
+            self.stdout.write(f"📏 Token length: {len(token)} characters")
             self.stdout.write("🎉 Agora configuration is working!")
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"❌ Token generation failed: {e}"))
+            import traceback
+            self.stdout.write(f"🔍 Full error: {traceback.format_exc()}")
