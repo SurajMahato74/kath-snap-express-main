@@ -2,6 +2,7 @@ from django.urls import path, include
 from . import api_views
 from . import order_views
 from . import complete_onboarding_view
+from . import fcm_test_views
 
 urlpatterns = [
     # Authentication
@@ -24,6 +25,7 @@ urlpatterns = [
 
     # FCM Token Registration
     path('register-fcm-token/', api_views.register_fcm_token_api, name='register_fcm_token'),
+    path('fcm-token/update/', fcm_test_views.update_fcm_token, name='update_fcm_token_main'),
 
     # Role Switching
     path('switch-role/', api_views.switch_role_api, name='switch_role'),
