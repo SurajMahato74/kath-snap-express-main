@@ -1,5 +1,6 @@
 from django.urls import path
 from . import message_views
+from . import fcm_test_views
 
 urlpatterns = [
     # Conversation APIs
@@ -23,4 +24,9 @@ urlpatterns = [
     path('calls/<int:call_id>/decline/', message_views.decline_call_api, name='decline_call'),
     path('calls/incoming/', message_views.incoming_calls_api, name='incoming_calls'),
     path('calls/history/', message_views.CallHistoryView.as_view(), name='call_history'),
+    
+    # FCM Test APIs
+    path('test-fcm-call/', fcm_test_views.test_fcm_call_notification, name='test_fcm_call'),
+    path('fcm-token/', fcm_test_views.get_fcm_token, name='get_fcm_token'),
+    path('fcm-token/update/', fcm_test_views.update_fcm_token, name='update_fcm_token'),
 ]

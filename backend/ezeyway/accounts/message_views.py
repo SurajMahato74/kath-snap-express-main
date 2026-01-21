@@ -291,6 +291,23 @@ def initiate_call_api(request):
                 }
             }
         )
+    
+    # Send FCM notification for background app wake-up
+    try:
+        from .models import VendorProfile
+        vendor_profile = VendorProfile.objects.filter(user=recipient).first()
+        if vendor_profile and vendor_profile.fcm_token:
+            fcm_service.send_call_notification(
+                fcm_token=vendor_profile.fcm_token,
+                call_data={
+                    'call_id': call.call_id,
+                    'caller_id': call.caller.id,
+                    'caller_name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username,
+                    'call_type': call.call_type
+                }
+            )
+    except Exception as e:
+        logger.error(f"Failed to send FCM call notification: {e}")
 
     # Return response in format expected by frontend
     return Response({

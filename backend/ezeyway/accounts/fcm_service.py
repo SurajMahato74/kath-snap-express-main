@@ -137,6 +137,78 @@ class FCMService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
+    def send_call_notification(self, fcm_token, call_data):
+        """Send HIGH PRIORITY call notification that wakes up app"""
+        try:
+            if not fcm_token:
+                logger.warning("No FCM token provided for call")
+                return False
+
+            if not firebase_admin._apps:
+                logger.error("Firebase not initialized")
+                return False
+
+            logger.info(f"Sending CALL notification to: {fcm_token[:20]}...")
+
+            message = messaging.Message(
+                token=fcm_token,
+                notification=messaging.Notification(
+                    title='📞 Incoming Call',
+                    body=f"{call_data.get('caller_name', 'Someone')} is calling you..."
+                ),
+                data={
+                    'type': 'incoming_call',
+                    'call_id': call_data.get('call_id', ''),
+                    'caller_id': str(call_data.get('caller_id', '')),
+                    'caller_name': call_data.get('caller_name', ''),
+                    'call_type': call_data.get('call_type', 'audio'),
+                    'action': 'show_call_screen',
+                    'autoOpen': 'true',
+                    'forceOpen': 'true',
+                    'wakeUp': 'true',
+                    'click_action': 'FLUTTER_NOTIFICATION_CLICK'
+                },
+                android=messaging.AndroidConfig(
+                    priority='high',
+                    notification=messaging.AndroidNotification(
+                        channel_id='call_notifications',
+                        priority=AndroidNotificationPriority.MAX,
+                        sound='default',
+                        default_vibrate_timings=True,
+                        default_light_settings=True,
+                        sticky=True,
+                        visibility=AndroidNotificationVisibility.PUBLIC,
+                        click_action='FLUTTER_NOTIFICATION_CLICK',
+                        tag='incoming_call'
+                    )
+                ),
+                apns=messaging.APNSConfig(
+                    headers={
+                        'apns-priority': '10',
+                        'apns-push-type': 'alert'
+                    },
+                    payload=messaging.APNSPayload(
+                        aps=messaging.Aps(
+                            alert=messaging.ApsAlert(
+                                title='📞 Incoming Call',
+                                body=f"{call_data.get('caller_name', 'Someone')} is calling you..."
+                            ),
+                            sound='default',
+                            badge=1,
+                            category='CALL_CATEGORY'
+                        )
+                    )
+                )
+            )
+
+            response = messaging.send(message)
+            logger.info(f"Call notification sent: {response}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send call notification: {e}")
+            return False
+
     def send_bulk_notification(self, fcm_tokens, title, body, data=None):
         """Send to multiple vendors"""
         try:
