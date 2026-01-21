@@ -1,1 +1,97 @@
-from django.http import JsonResponse\nfrom django.views.decorators.csrf import csrf_exempt\nfrom rest_framework.decorators import api_view, permission_classes\nfrom rest_framework.permissions import IsAuthenticated\nfrom rest_framework.response import Response\nfrom .fcm_service import fcm_service\nfrom .models import VendorProfile\nimport json\nimport logging\n\nlogger = logging.getLogger(__name__)\n\n@csrf_exempt\n@api_view(['POST'])\n@permission_classes([IsAuthenticated])\ndef test_fcm_call_notification(request):\n    \"\"\"Manual FCM call notification test endpoint\"\"\"\n    try:\n        data = request.data\n        fcm_token = data.get('fcm_token')\n        caller_name = data.get('caller_name', 'Test Caller')\n        \n        # If no token provided, try to get from current user\n        if not fcm_token:\n            try:\n                vendor_profile = VendorProfile.objects.get(user=request.user)\n                fcm_token = vendor_profile.fcm_token\n            except VendorProfile.DoesNotExist:\n                return Response({'error': 'No FCM token found for user'}, status=400)\n        \n        if not fcm_token:\n            return Response({'error': 'fcm_token required'}, status=400)\n        \n        logger.info(f\"Testing FCM call notification to token: {fcm_token[:20]}...\")\n        \n        # Send call notification\n        success = fcm_service.send_call_notification(\n            fcm_token=fcm_token,\n            call_data={\n                'call_id': 'test_call_123',\n                'caller_id': request.user.id,\n                'caller_name': caller_name,\n                'call_type': 'audio'\n            }\n        )\n        \n        if success:\n            return Response({\n                'message': 'Call notification sent successfully!',\n                'token': fcm_token[:20] + '...',\n                'caller_name': caller_name\n            })\n        else:\n            return Response({'error': 'Failed to send notification'}, status=500)\n            \n    except Exception as e:\n        logger.error(f\"FCM test error: {e}\")\n        return Response({'error': str(e)}, status=500)\n\n@csrf_exempt\n@api_view(['GET'])\n@permission_classes([IsAuthenticated])\ndef get_fcm_token(request):\n    \"\"\"Get FCM token for current user\"\"\"\n    try:\n        vendor_profile = VendorProfile.objects.get(user=request.user)\n        if vendor_profile.fcm_token:\n            return Response({\n                'fcm_token': vendor_profile.fcm_token,\n                'user': request.user.username,\n                'token_preview': vendor_profile.fcm_token[:30] + '...'\n            })\n        else:\n            return Response({'error': 'No FCM token registered'}, status=404)\n    except VendorProfile.DoesNotExist:\n        return Response({'error': 'User is not a vendor'}, status=404)\n\n@csrf_exempt\n@api_view(['POST'])\n@permission_classes([IsAuthenticated])\ndef update_fcm_token(request):\n    \"\"\"Update FCM token for current user\"\"\"\n    try:\n        fcm_token = request.data.get('fcm_token')\n        if not fcm_token:\n            return Response({'error': 'fcm_token required'}, status=400)\n        \n        vendor_profile, created = VendorProfile.objects.get_or_create(user=request.user)\n        vendor_profile.fcm_token = fcm_token\n        vendor_profile.save()\n        \n        return Response({\n            'message': 'FCM token updated successfully',\n            'token_preview': fcm_token[:30] + '...'\n        })\n    except Exception as e:\n        return Response({'error': str(e)}, status=500)
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .fcm_service import fcm_service
+from .models import VendorProfile
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def test_fcm_call_notification(request):
+    """Manual FCM call notification test endpoint"""
+    try:
+        data = request.data
+        fcm_token = data.get('fcm_token')
+        caller_name = data.get('caller_name', 'Test Caller')
+        
+        # If no token provided, try to get from current user
+        if not fcm_token:
+            try:
+                vendor_profile = VendorProfile.objects.get(user=request.user)
+                fcm_token = vendor_profile.fcm_token
+            except VendorProfile.DoesNotExist:
+                return Response({'error': 'No FCM token found for user'}, status=400)
+        
+        if not fcm_token:
+            return Response({'error': 'fcm_token required'}, status=400)
+        
+        logger.info(f"Testing FCM call notification to token: {fcm_token[:20]}...")
+        
+        # Send call notification
+        success = fcm_service.send_call_notification(
+            fcm_token=fcm_token,
+            call_data={
+                'call_id': 'test_call_123',
+                'caller_id': request.user.id,
+                'caller_name': caller_name,
+                'call_type': 'audio'
+            }
+        )
+        
+        if success:
+            return Response({
+                'message': 'Call notification sent successfully!',
+                'token': fcm_token[:20] + '...',
+                'caller_name': caller_name
+            })
+        else:
+            return Response({'error': 'Failed to send notification'}, status=500)
+            
+    except Exception as e:
+        logger.error(f"FCM test error: {e}")
+        return Response({'error': str(e)}, status=500)
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_fcm_token(request):
+    """Get FCM token for current user"""
+    try:
+        vendor_profile = VendorProfile.objects.get(user=request.user)
+        if vendor_profile.fcm_token:
+            return Response({
+                'fcm_token': vendor_profile.fcm_token,
+                'user': request.user.username,
+                'token_preview': vendor_profile.fcm_token[:30] + '...'
+            })
+        else:
+            return Response({'error': 'No FCM token registered'}, status=404)
+    except VendorProfile.DoesNotExist:
+        return Response({'error': 'User is not a vendor'}, status=404)
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_fcm_token(request):
+    """Update FCM token for current user"""
+    try:
+        fcm_token = request.data.get('fcm_token')
+        if not fcm_token:
+            return Response({'error': 'fcm_token required'}, status=400)
+        
+        vendor_profile, created = VendorProfile.objects.get_or_create(user=request.user)
+        vendor_profile.fcm_token = fcm_token
+        vendor_profile.save()
+        
+        return Response({
+            'message': 'FCM token updated successfully',
+            'token_preview': fcm_token[:30] + '...'
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)

@@ -239,4 +239,24 @@ class FCMService:
             return False
 
 # Global singleton
+fcm_service = FCMService()nfig(
+                    priority='high',
+                    notification=messaging.AndroidNotification(
+                        channel_id='order_alerts',
+                        priority=AndroidNotificationPriority.HIGH,
+                        sound='default'
+                    )
+                ),
+                tokens=fcm_tokens
+            )
+
+            response = messaging.send_multicast(message)
+            logger.info(f"Bulk sent: {response.success_count}/{len(fcm_tokens)}")
+            return response.success_count > 0
+
+        except Exception as e:
+            logger.error(f"Bulk FCM failed: {e}")
+            return False
+
+# Global singleton
 fcm_service = FCMService()
