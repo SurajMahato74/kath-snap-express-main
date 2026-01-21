@@ -45,7 +45,7 @@ class FCMService:
                 logger.info("Firebase Admin SDK already initialized")
                 return
 
-            service_account_path = os.environ.get('FIREBASE_SERVICEamp_ACCOUNT_PATH')
+            service_account_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
 
             if not service_account_path:
                 cwd = os.getcwd()
@@ -220,26 +220,6 @@ class FCMService:
                 notification=messaging.Notification(title=title, body=body),
                 data=data or {},
                 android=messaging.AndroidConfig(
-                    priority='high',
-                    notification=messaging.AndroidNotification(
-                        channel_id='order_alerts',
-                        priority=AndroidNotificationPriority.HIGH,
-                        sound='default'
-                    )
-                ),
-                tokens=fcm_tokens
-            )
-
-            response = messaging.send_multicast(message)
-            logger.info(f"Bulk sent: {response.success_count}/{len(fcm_tokens)}")
-            return response.success_count > 0
-
-        except Exception as e:
-            logger.error(f"Bulk FCM failed: {e}")
-            return False
-
-# Global singleton
-fcm_service = FCMService()nfig(
                     priority='high',
                     notification=messaging.AndroidNotification(
                         channel_id='order_alerts',
