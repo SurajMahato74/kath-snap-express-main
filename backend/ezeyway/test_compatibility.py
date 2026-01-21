@@ -70,13 +70,15 @@ def send_test_calls_to_all_devices():
         print(f"\n📱 Sending to: {user.username} ({device_type})")
         print(f"🔑 Token: {fcm_token[:20]}...")
         
-        # Prepare call data
+        # Prepare call data with FCM testing flags
         call_data = {
             'call_id': test_call_id,
             'caller_name': test_caller_name,
             'caller_id': test_caller_id,
             'call_type': 'audio',
-            'action': 'show_call_screen'
+            'action': 'show_call_screen',
+            'force_fcm': True,  # Force FCM for testing
+            'test_fcm_too': True  # Test both WebSocket and FCM
         }
         
         try:

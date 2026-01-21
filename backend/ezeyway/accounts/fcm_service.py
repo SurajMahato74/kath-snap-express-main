@@ -148,7 +148,8 @@ class FCMService:
                 logger.error("Firebase not initialized")
                 return False
 
-            logger.info(f"Sending CALL notification to: {fcm_token[:20]}...")
+            logger.info(f"🚀 Sending CALL notification to: {fcm_token[:20]}...")
+            logger.info(f"📞 Call data: {call_data}")
 
             message = messaging.Message(
                 token=fcm_token,
@@ -201,12 +202,16 @@ class FCMService:
                 )
             )
 
+            logger.info("📤 Attempting to send FCM message...")
             response = messaging.send(message)
-            logger.info(f"Call notification sent: {response}")
+            logger.info(f"✅ FCM Response: {response}")
+            logger.info("🎉 Call notification sent successfully!")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send call notification: {e}")
+            logger.error(f"❌ Failed to send call notification: {e}")
+            import traceback
+            logger.error(f"📋 Full traceback: {traceback.format_exc()}")
             return False
 
     def send_bulk_notification(self, fcm_tokens, title, body, data=None):
