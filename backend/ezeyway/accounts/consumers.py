@@ -897,6 +897,110 @@ class UserConsumer(AsyncWebsocketConsumer):
         }))
 
 
+class CallRoomConsumer(AsyncWebsocketConsumer):
+    """Dedicated consumer for call room connections"""
+    
+    async def connect(self):
+        self.user = self.scope["user"]
+        if self.user.is_anonymous:
+            await self.close()
+            return
+        
+        # Get call_id from URL route
+        self.call_id = self.scope['url_route']['kwargs'].get('call_id')
+        
+        if not self.call_id:
+            await self.close()
+            return
+            
+        # Verify user has access to this call
+        has_access = await self.verify_call_access()
+        if not has_access:
+            await self.close()
+            return
+            
+        self.call_group_name = f"call_{self.call_id}"
+        
+        # Join call group
+        await self.channel_layer.group_add(
+            self.call_group_name,
+            self.channel_name
+        )
+        
+        await self.accept()
+        logger.info(f"CallRoomConsumer connected for user {self.user.id} in call {self.call_id}")
+        
+        # Send join confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'joined_call_room',
+            'call_id': self.call_id,
+            'user_id': self.user.id
+        }))
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'call_group_name'):
+            await self.channel_layer.group_discard(
+                self.call_group_name,
+                self.channel_name
+            )
+            logger.info(f"User {self.user.id} left call room: {self.call_id}")
+
+    async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+            signal_type = data.get('type')
+            
+            if signal_type in ['offer', 'answer', 'ice_candidate', 'call_status']:
+                # Forward WebRTC signaling to other participants
+                await self.channel_layer.group_send(
+                    self.call_group_name,
+                    {
+                        'type': f'webrtc_{signal_type}',
+                        'data': data,
+                        'sender_id': self.user.id,
+                        'sender_name': self.user.username
+                    }
+                )
+                
+        except json.JSONDecodeError:
+            await self.send(text_data=json.dumps({
+                'error': 'Invalid JSON',
+                'type': 'error'
+            }))
+
+    # WebRTC signaling handlers
+    async def webrtc_offer(self, event):
+        if event['sender_id'] != self.user.id:
+            await self.send(text_data=json.dumps(event['data']))
+
+    async def webrtc_answer(self, event):
+        if event['sender_id'] != self.user.id:
+            await self.send(text_data=json.dumps(event['data']))
+
+    async def webrtc_ice_candidate(self, event):
+        if event['sender_id'] != self.user.id:
+            await self.send(text_data=json.dumps(event['data']))
+
+    async def webrtc_call_status(self, event):
+        await self.send(text_data=json.dumps(event['data']))
+
+    @database_sync_to_async
+    def verify_call_access(self):
+        """Verify user has access to this call"""
+        try:
+            # Try to find by call_id (string format)
+            call = Call.objects.get(call_id=self.call_id)
+        except Call.DoesNotExist:
+            try:
+                # If not found, try to find by numeric id
+                call = Call.objects.get(id=int(self.call_id))
+            except (Call.DoesNotExist, ValueError):
+                return False
+        
+        # Check if user is caller or receiver
+        return call.caller == self.user or call.receiver == self.user
+
+
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.user = self.scope["user"]
