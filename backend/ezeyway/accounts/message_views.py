@@ -270,8 +270,9 @@ def initiate_call_api(request):
         token_generator = AgoraTokenGenerator()
         agora_token = token_generator.generate_channel_token(call.call_id, request.user.id)
         agora_app_id = token_generator.app_id
+        logger.info(f"✅ Generated Agora token for call {call.call_id}")
     except Exception as e:
-        logger.error(f"Failed to generate Agora token: {e}")
+        logger.error(f"❌ Failed to generate Agora token: {e}")
         agora_token = None
         agora_app_id = None
     
@@ -309,6 +310,7 @@ def initiate_call_api(request):
     # Send FCM notification for background app wake-up
     try:
         from .models import VendorProfile
+        from .fcm_service import fcm_service
         vendor_profile = VendorProfile.objects.filter(user=recipient).first()
         if vendor_profile and vendor_profile.fcm_token:
             fcm_service.send_call_notification(
