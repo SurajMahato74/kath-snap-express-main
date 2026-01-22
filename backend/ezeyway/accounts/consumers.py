@@ -988,17 +988,23 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
     def verify_call_access(self):
         """Verify user has access to this call"""
         try:
+            # Remove 'call_' prefix if present for database lookup
+            lookup_id = self.call_id.replace('call_', '') if self.call_id.startswith('call_') else self.call_id
+            
             # Try to find by call_id (string format)
             call = Call.objects.get(call_id=self.call_id)
         except Call.DoesNotExist:
             try:
                 # If not found, try to find by numeric id
-                call = Call.objects.get(id=int(self.call_id))
+                call = Call.objects.get(id=int(lookup_id))
             except (Call.DoesNotExist, ValueError):
+                logger.error(f"Call not found: {self.call_id}")
                 return False
         
         # Check if user is caller or receiver
-        return call.caller == self.user or call.receiver == self.user
+        has_access = call.caller == self.user or call.receiver == self.user
+        logger.info(f"Call access check for {self.user.id} on call {self.call_id}: {has_access}")
+        return has_access
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):
