@@ -43,7 +43,7 @@ def create_call_api(request):
 
         # Generate Agora token for the call
         token_generator = AgoraTokenGenerator()
-        agora_token = token_generator.generate_channel_token(call_id, request.user.id)
+        agora_token = token_generator.generate_channel_token(call_id, 0)
         
         # Send notification using fallback
         from .websocket_fallback import send_call_with_fallback
@@ -180,10 +180,10 @@ def accept_call_api(request, call_id):
         # Generate fresh Agora tokens for both users with longer expiry
         token_generator = AgoraTokenGenerator()
         # Generate token with 2 hour expiry for active call
-        accepter_token = token_generator.generate_channel_token(call_id, request.user.id, expire_time=7200)
+        accepter_token = token_generator.generate_channel_token(call_id, 0, expire_time=7200)
         
         try:
-            caller_token = token_generator.generate_channel_token(call_id, call.caller.id, expire_time=7200)
+            caller_token = token_generator.generate_channel_token(call_id, 0, expire_time=7200)
             caller_id = call.caller.id
         except AttributeError:
             logger.error(f"Call {call_id} has no caller set")
@@ -242,7 +242,30 @@ def generate_agora_token_api(request):
     try:
         call_id = request.data.get('call_id')
         channel_name = request.data.get('channel_name', call_id)
-        uid = request.data.get('uid', request.user.id)
+        uid = request.data.get('uid', 0)
+        
+        if not channel_name:
+            return Response({'error': 'channel_name or call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        token_generator = AgoraTokenGenerator()
+        token = token_generator.generate_channel_token(channel_name, uid)
+        
+        # Calculate expires_at timestamp
+        import time
+        from django.conf import settings
+        token_expiry = getattr(settings, 'CALL_SETTINGS', {}).get('TOKEN_EXPIRY', 7200)
+        expires_at = int(time.time()) + token_expiry
+        
+        return Response({
+            'token': token,
+            'channel_name': channel_name,
+            'app_id': token_generator.app_id,
+            'expires_at': expires_at
+        })
+        
+    except Exception as e:
+        logger.error(f"Generate token error: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)get('uid', request.user.id)
         
         if not channel_name:
             return Response({'error': 'channel_name or call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
