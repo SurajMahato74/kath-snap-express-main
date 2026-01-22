@@ -28,7 +28,7 @@ def accept_call_api(request, call_id):
         # Generate fresh Agora token for accepter
         from .agora_service import AgoraTokenGenerator
         token_generator = AgoraTokenGenerator()
-        accepter_token = token_generator.generate_channel_token(call_id, 0, expire_time=7200)
+        accepter_token = token_generator.generate_channel_token(call_id, 0, expire_sec=7200)
         
         # Notify caller via WebSocket/FCM
         from .websocket_fallback import send_call_with_fallback
