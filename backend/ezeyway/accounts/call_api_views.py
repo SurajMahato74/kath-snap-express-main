@@ -177,12 +177,13 @@ def accept_call_api(request, call_id):
         call.answered_at = timezone.now()
         call.save()
         
-        # Generate Agora tokens for both users
+        # Generate fresh Agora tokens for both users with longer expiry
         token_generator = AgoraTokenGenerator()
-        accepter_token = token_generator.generate_channel_token(call_id, request.user.id)
+        # Generate token with 2 hour expiry for active call
+        accepter_token = token_generator.generate_channel_token(call_id, request.user.id, expire_time=7200)
         
         try:
-            caller_token = token_generator.generate_channel_token(call_id, call.caller.id)
+            caller_token = token_generator.generate_channel_token(call_id, call.caller.id, expire_time=7200)
             caller_id = call.caller.id
         except AttributeError:
             logger.error(f"Call {call_id} has no caller set")
