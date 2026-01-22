@@ -265,6 +265,27 @@ def generate_agora_token_api(request):
         
     except Exception as e:
         logger.error(f"Generate token error: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)nnel_name:
+            return Response({'error': 'channel_name or call_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        token_generator = AgoraTokenGenerator()
+        token = token_generator.generate_channel_token(channel_name, uid)
+        
+        # Calculate expires_at timestamp
+        import time
+        from django.conf import settings
+        token_expiry = getattr(settings, 'CALL_SETTINGS', {}).get('TOKEN_EXPIRY', 7200)
+        expires_at = int(time.time()) + token_expiry
+        
+        return Response({
+            'token': token,
+            'channel_name': channel_name,
+            'app_id': token_generator.app_id,
+            'expires_at': expires_at
+        })
+        
+    except Exception as e:
+        logger.error(f"Generate token error: {e}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)get('uid', request.user.id)
         
         if not channel_name:
