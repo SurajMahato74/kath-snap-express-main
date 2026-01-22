@@ -89,7 +89,7 @@ class AgoraTokenGenerator:
     
     def generate_rtc_token(self, channel_name, uid=0, role=1, expire_time=7200):
         """Legacy method for backward compatibility"""
-        return self.generate_channel_token(channel_name, uid, role, expire_time)
+        return self.generate_channel_token(channel_name, uid, role, expire_sec=expire_time)
 
 # API Views
 def generate_agora_token_api(request):
