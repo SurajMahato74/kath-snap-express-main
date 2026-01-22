@@ -25,6 +25,11 @@ def accept_call_api(request, call_id):
         call.answered_at = timezone.now()
         call.save()
         
+        # Generate fresh Agora token for accepter
+        from .agora_service import AgoraTokenGenerator
+        token_generator = AgoraTokenGenerator()
+        accepter_token = token_generator.generate_channel_token(call_id, 0, expire_time=7200)
+        
         # Notify caller via WebSocket/FCM
         from .websocket_fallback import send_call_with_fallback
         
@@ -41,7 +46,10 @@ def accept_call_api(request, call_id):
             'success': True,
             'message': 'Call accepted',
             'call_id': call_id,
-            'status': 'answered'
+            'status': 'answered',
+            'agora_token': accepter_token,
+            'agora_channel': call_id,
+            'agora_app_id': token_generator.app_id
         })
         
     except Call.DoesNotExist:

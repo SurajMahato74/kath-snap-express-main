@@ -34,35 +34,37 @@ class AgoraTokenGenerator:
             return self._generate_fallback(channel_name, uid, expire_sec)
     
     def _generate_with_sdk(self, channel_name, uid, role, expire_sec):
-        """Try different SDK method names"""
+        """Generate token using official Agora SDK"""
         current_time = int(time.time())
         privilege_expire_ts = current_time + expire_sec
         
-        # Try different method names based on package version
-        methods_to_try = [
-            'build_token_with_uid',
-            'buildTokenWithUid', 
-            'build_token',
-            'buildToken'
-        ]
+        # Debug logging
+        print(f"🔍 Generating Agora token:")
+        print(f"  - App ID: {self.app_id}")
+        print(f"  - App Certificate: {self.app_certificate[:8]}...{self.app_certificate[-4:]}")
+        print(f"  - Channel: {channel_name}")
+        print(f"  - UID: {uid}")
+        print(f"  - Role: {role}")
+        print(f"  - Expires in: {expire_sec} seconds")
+        print(f"  - Expiry timestamp: {privilege_expire_ts}")
         
-        for method_name in methods_to_try:
-            if hasattr(RtcTokenBuilder, method_name):
-                method = getattr(RtcTokenBuilder, method_name)
-                try:
-                    return method(
-                        self.app_id,
-                        self.app_certificate,
-                        str(channel_name),
-                        int(uid),
-                        role,
-                        privilege_expire_ts
-                    )
-                except Exception:
-                    continue
-        
-        # If SDK methods fail, use fallback
-        return self._generate_fallback(channel_name, uid, expire_sec)
+        try:
+            # Use the correct method name for agora-token-builder
+            token = RtcTokenBuilder.buildTokenWithUid(
+                self.app_id,
+                self.app_certificate,
+                channel_name,
+                uid,
+                role,
+                privilege_expire_ts
+            )
+            print(f"✅ Token generated successfully: {len(token)} chars")
+            print(f"✅ Token preview: {token[:30]}...")
+            return token
+        except Exception as e:
+            print(f"❌ SDK token generation failed: {e}")
+            # Fall back to manual generation
+            return self._generate_fallback(channel_name, uid, expire_sec)
     
     def _generate_fallback(self, channel_name, uid, expire_sec):
         """Fallback token generation using basic algorithm"""
