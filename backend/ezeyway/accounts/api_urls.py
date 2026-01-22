@@ -38,6 +38,7 @@ urlpatterns = [
     path('calls/<str:call_id>/status/', call_status_api.get_call_status_api, name='get_call_status_api'),
     path('calls/<str:call_id>/sync/', call_status_api.sync_call_status_api, name='sync_call_status_api'),
     path('calls/<str:call_id>/reconnect/', call_status_api.reconnect_call_api, name='reconnect_call_api'),
+    path('calls/pending/', call_api_views.get_pending_calls_api, name='get_pending_calls_api'),
     path('agora-token/', call_api_views.generate_agora_token_api, name='generate_agora_token_api'),
     path('update-fcm-token/', call_api_views.update_fcm_token_api, name='update_fcm_token_api'),
 

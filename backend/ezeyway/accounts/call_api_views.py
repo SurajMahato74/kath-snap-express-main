@@ -82,6 +82,46 @@ def create_call_api(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_pending_calls_api(request):
+    """Get pending calls for the authenticated user"""
+    try:
+        from .message_models import Call
+        
+        # Get pending calls where user is receiver
+        pending_calls = Call.objects.filter(
+            receiver=request.user,
+            status__in=['initiated', 'ringing']
+        ).order_by('-started_at')
+        
+        calls_data = []
+        for call in pending_calls:
+            calls_data.append({
+                'id': call.id,
+                'call_id': call.call_id,
+                'caller': {
+                    'id': call.caller.id,
+                    'name': f"{call.caller.first_name} {call.caller.last_name}".strip() or call.caller.username,
+                    'username': call.caller.username
+                },
+                'call_type': call.call_type,
+                'status': call.status,
+                'started_at': call.started_at.isoformat(),
+                'duration': None
+            })
+        
+        return Response({
+            'success': True,
+            'calls': calls_data,
+            'count': len(calls_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Get pending calls error: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_fcm_token_api(request):
