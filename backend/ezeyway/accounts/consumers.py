@@ -296,7 +296,7 @@ class CallConsumer(AsyncWebsocketConsumer):
             
             if signal_type == 'join_call':
                 await self.handle_join_call(data)
-            elif signal_type in ['offer', 'answer', 'ice_candidate', 'toggle_media', 'call_status']:
+            elif signal_type in ['offer', 'answer', 'ice_candidate', 'toggle_media', 'call_status', 'call_accepted', 'call_ended']:
                 if not hasattr(self, 'call_group_name'):
                     await self.send(text_data=json.dumps({
                         'error': 'Must join_call first',
@@ -314,6 +314,10 @@ class CallConsumer(AsyncWebsocketConsumer):
                     await self.handle_toggle_media(data)
                 elif signal_type == 'call_status':
                     await self.handle_call_status(data)
+                elif signal_type == 'call_accepted':
+                    await self.handle_call_accepted(data)
+                elif signal_type == 'call_ended':
+                    await self.handle_call_ended(data)
             elif signal_type == 'call_quality':
                 await self.handle_call_quality(data)
             elif signal_type == 'leave_call':
@@ -520,6 +524,46 @@ class CallConsumer(AsyncWebsocketConsumer):
             status = data.get('status')
             if status:
                 call_state_manager.sync_call_state(self.call_id, self.user.id, status)
+
+    async def handle_call_accepted(self, data):
+        """Handle call_accepted message from frontend"""
+        logger.info(f"🔥 CRITICAL FIX: Handling call_accepted from frontend for user {self.user.id}")
+        
+        await self.update_call_status('answered')
+        
+        # Broadcast to ALL participants in call room
+        await self.channel_layer.group_send(
+            self.call_group_name,
+            {
+                'type': 'call_status_update',
+                'status': 'answered',
+                'user_id': self.user.id,
+                'call_id': data.get('call_id'),
+                'username': self.user.username,
+                'timestamp': data.get('timestamp')
+            }
+        )
+        logger.info(f"✅ Broadcasted call_accepted to call group {self.call_group_name}")
+
+    async def handle_call_ended(self, data):
+        """Handle call_ended message from frontend"""
+        logger.info(f"🔥 CRITICAL FIX: Handling call_ended from frontend for user {self.user.id}")
+        
+        await self.update_call_status('ended')
+        
+        # Broadcast to ALL participants in call room
+        await self.channel_layer.group_send(
+            self.call_group_name,
+            {
+                'type': 'call_status_update',
+                'status': 'ended',
+                'user_id': self.user.id,
+                'call_id': data.get('call_id'),
+                'username': self.user.username,
+                'timestamp': data.get('timestamp')
+            }
+        )
+        logger.info(f"✅ Broadcasted call_ended to call group {self.call_group_name}")
 
     async def handle_heartbeat(self, data):
         """Handle heartbeat to maintain connection"""
