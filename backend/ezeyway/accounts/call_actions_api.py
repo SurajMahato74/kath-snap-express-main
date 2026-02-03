@@ -30,16 +30,31 @@ def accept_call_api(request, call_id):
         token_generator = AgoraTokenGenerator()
         accepter_token = token_generator.generate_channel_token(call_id, 0, expire_sec=7200)
         
-        # Notify caller via WebSocket/FCM
-        from .websocket_fallback import send_call_with_fallback
+        # 🔥 FIX: Direct WebSocket broadcast to caller FIRST
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
         
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{call.caller.id}",
+                {
+                    'type': 'call_accepted',
+                    'call_id': call_id,
+                    'accepter_name': f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    'accepter_id': request.user.id
+                }
+            )
+            logger.info(f"✅ Sent call_accepted WebSocket to user_{call.caller.id}")
+        
+        # Fallback to FCM if needed
+        from .websocket_fallback import send_call_with_fallback
         notification_data = {
             'type': 'call_accepted',
             'call_id': call_id,
             'accepter_name': f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
             'accepter_id': str(request.user.id)
         }
-        
         send_call_with_fallback(call.caller.id, notification_data)
         
         return Response({
@@ -147,15 +162,32 @@ def end_call_api(request, call_id):
         
         # Notify other party
         other_user = call.receiver if call.caller == request.user else call.caller
-        from .websocket_fallback import send_call_with_fallback
         
+        # 🔥 FIX: Direct WebSocket broadcast to other user FIRST
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{other_user.id}",
+                {
+                    'type': 'call_ended',
+                    'call_id': call_id,
+                    'duration': duration,
+                    'ended_by': request.user.id
+                }
+            )
+            logger.info(f"✅ Sent call_ended WebSocket to user_{other_user.id}")
+        
+        # Fallback to FCM if needed
+        from .websocket_fallback import send_call_with_fallback
         notification_data = {
             'type': 'call_ended',
             'call_id': call_id,
             'duration': duration,
             'ended_by': str(request.user.id)
         }
-        
         send_call_with_fallback(other_user.id, notification_data)
         
         return Response({

@@ -631,11 +631,14 @@ class CallConsumer(AsyncWebsocketConsumer):
         
     async def call_accepted(self, event):
         """Handle call accepted notifications"""
+        logger.info(f"DEBUG: Sending call_accepted to user {self.user.id}: {event}")
         await self.send(text_data=json.dumps({
             'type': 'call_accepted',
             'call_id': event['call_id'],
-            'accepter_name': event['accepter_name']
+            'accepter_name': event['accepter_name'],
+            'accepter_id': event['accepter_id']
         }))
+        logger.info(f"DEBUG: Sent call_accepted WebSocket message to user {self.user.id}")
         
     async def call_rejected(self, event):
         """Handle call rejected notifications"""
@@ -658,12 +661,14 @@ class CallConsumer(AsyncWebsocketConsumer):
         
     async def call_ended(self, event):
         """Handle call ended notifications"""
+        logger.info(f"DEBUG: Sending call_ended to user {self.user.id}: {event}")
         await self.send(text_data=json.dumps({
             'type': 'call_ended',
             'call_id': event['call_id'],
             'duration': event['duration'],
             'ended_by': event['ended_by']
         }))
+        logger.info(f"DEBUG: Sent call_ended WebSocket message to user {self.user.id}")
 
     # Database operations
     @database_sync_to_async
