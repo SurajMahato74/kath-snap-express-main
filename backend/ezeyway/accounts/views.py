@@ -3,10 +3,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
+from django.db import transaction
 from django.db.models import Count, Q
+from django.core.paginator import Paginator
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 from django.views.decorators.csrf import csrf_exempt
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -758,7 +762,48 @@ def manage_initial_wallet_points(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         
-        if action == 'add_points':
+        if action == 'credit_vendor_wallet':
+            vendor_id = request.POST.get('vendor_id')
+            points = request.POST.get('points', '').strip()
+            try:
+                amount = Decimal(points)
+                if not amount.is_finite():
+                    raise InvalidOperation
+            except (InvalidOperation, TypeError, ValueError):
+                messages.error(request, 'Enter a valid wallet points amount.')
+            else:
+                if amount <= 0:
+                    messages.error(request, 'Wallet points amount must be greater than zero.')
+                elif amount > Decimal('99999999.99'):
+                    messages.error(request, 'Wallet points must be at most ₹99,999,999.99 with no more than two decimal places.')
+                else:
+                    try:
+                        has_excess_precision = amount != amount.quantize(Decimal('0.01'))
+                    except InvalidOperation:
+                        has_excess_precision = True
+                    if has_excess_precision:
+                        messages.error(request, 'Wallet points must be at most ₹99,999,999.99 with no more than two decimal places.')
+                    else:
+                        try:
+                            vendor_profile = VendorProfile.objects.select_related('user').get(
+                                pk=vendor_id,
+                                user__user_type='vendor',
+                            )
+                        except (VendorProfile.DoesNotExist, TypeError, ValueError):
+                            messages.error(request, 'Vendor not found.')
+                        else:
+                            with transaction.atomic():
+                                wallet, _ = VendorWallet.objects.get_or_create(vendor=vendor_profile)
+                                wallet = VendorWallet.objects.select_for_update().get(pk=wallet.pk)
+                                wallet.add_money(
+                                    amount,
+                                    description=f'Admin wallet points added by {request.user.username}',
+                                )
+                            messages.success(
+                                request,
+                                f'₹{amount:.2f} added to {vendor_profile.business_name} wallet successfully.',
+                            )
+        elif action == 'add_points':
             points = request.POST.get('points')
             if points:
                 try:
@@ -803,13 +848,33 @@ def manage_initial_wallet_points(request):
             except ChargeRate.DoesNotExist:
                 messages.error(request, 'Charge rate not found.')
         
-        return redirect('manage_initial_wallet_points')
+        redirect_url = request.path
+        vendor_search = request.POST.get('vendor_search', '').strip()
+        if vendor_search:
+            redirect_url = f'{redirect_url}?{urlencode({"vendor_search": vendor_search})}'
+        return redirect(redirect_url)
     
     wallet_points = InitialWalletPoints.objects.all().order_by('points')
     charge_rates = ChargeRate.objects.all().order_by('min_amount')
+    vendor_search = request.GET.get('vendor_search', '').strip()
+    vendor_profiles = VendorProfile.objects.select_related('user', 'wallet').filter(user__user_type='vendor')
+    if vendor_search:
+        vendor_profiles = vendor_profiles.filter(
+            Q(business_name__icontains=vendor_search)
+            | Q(owner_name__icontains=vendor_search)
+            | Q(user__username__icontains=vendor_search)
+            | Q(user__email__icontains=vendor_search)
+            | Q(business_email__icontains=vendor_search)
+            | Q(business_phone__icontains=vendor_search)
+        )
+    vendor_page = Paginator(vendor_profiles.order_by('business_name', 'id'), 25).get_page(
+        request.GET.get('vendor_page', 1)
+    )
     context = {
         'wallet_points': wallet_points,
         'charge_rates': charge_rates,
+        'vendor_profiles': vendor_page,
+        'vendor_search': vendor_search,
     }
     return render(request, 'accounts/manage_initial_wallet_points.html', context)
 
