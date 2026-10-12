@@ -232,6 +232,28 @@ def manage_vendors(request):
         messages.error(request, 'Access denied.')
         return redirect('login')
 
+    if request.method == 'POST':
+        if request.POST.get('action') != 'set_vendor_online' or request.POST.get('is_active') not in ('true', 'false'):
+            messages.error(request, 'Invalid vendor status request. Please try again.')
+            return redirect('manage_vendors')
+        try:
+            vendor_id = int(request.POST.get('vendor_id', ''))
+        except (TypeError, ValueError):
+            messages.error(request, 'Invalid vendor ID.')
+            return redirect('manage_vendors')
+        vendor = get_object_or_404(VendorProfile, pk=vendor_id)
+        is_active = request.POST['is_active'] == 'true'
+        # Explicit desired state makes repeated submissions idempotent. This
+        # superadmin action does not change approval or the owner's login status.
+        VendorProfile.objects.filter(pk=vendor.pk).update(
+            is_active=is_active,
+            status_override=True,
+            status_override_date=timezone.localdate(),
+        )
+        logger.info('Superadmin %s set vendor %s online=%s', request.user.pk, vendor.pk, is_active)
+        messages.success(request, f'{vendor.business_name} is now {"online" if is_active else "offline"}.')
+        return redirect('manage_vendors')
+
     logger.debug(f"manage_vendors view called by user: {request.user.username}")
     
     # Ensure user has auth token

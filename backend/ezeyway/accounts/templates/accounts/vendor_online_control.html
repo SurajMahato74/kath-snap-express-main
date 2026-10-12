@@ -1,0 +1,13 @@
+<form method="post" action="{% url 'manage_vendors' %}" class="d-flex flex-wrap gap-2 align-items-center vendor-online-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="set_vendor_online">
+    <input type="hidden" name="vendor_id" value="{{ vendor.id }}">
+    <input type="hidden" name="is_active" value="{% if vendor.is_active %}false{% else %}true{% endif %}">
+    <span class="badge {% if vendor.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+        {% if vendor.is_active %}Online{% else %}Offline{% endif %}
+    </span>
+    <button type="submit" class="btn btn-sm {% if vendor.is_active %}btn-outline-secondary{% else %}btn-outline-success{% endif %}"
+            aria-label="Set {{ vendor.business_name }} {% if vendor.is_active %}offline{% else %}online{% endif %}">
+        {% if vendor.is_active %}Set Offline{% else %}Set Online{% endif %}
+    </button>
+</form>
