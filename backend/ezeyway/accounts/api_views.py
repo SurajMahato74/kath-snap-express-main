@@ -1,3 +1,4 @@
+from .featured_status import sync_featured_products, reschedule_paid_feature
 from rest_framework import status, generics, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -1216,6 +1217,7 @@ class ProductListCreateView(generics.ListCreateAPIView):
     pagination_class = PageNumberPagination
 
     def get_queryset(self):
+        sync_featured_products(Product.objects.filter(vendor__user=self.request.user))
         if self.request.user.is_superuser:
             return Product.objects.all().order_by('-created_at')
         try:
@@ -1237,6 +1239,7 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
+        sync_featured_products(Product.objects.filter(vendor__user=self.request.user))
         if self.request.user.is_superuser:
             return Product.objects.all()
         try:
@@ -3225,6 +3228,7 @@ def image_search_api(request):
 @permission_classes([permissions.AllowAny])
 def search_products_api(request):
     """Search products with location-based filtering"""
+    sync_featured_products()
     print("\nPRODUCT SEARCH API DEBUG - Starting query")
     print(f"Query params: {dict(request.query_params)}")
 
@@ -3861,7 +3865,7 @@ def purchase_featured_package_api(request):
         try:
             from datetime import datetime, date
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            if start_date < timezone.now().date():
+            if start_date < timezone.localdate():
                 return Response({'error': 'Start date cannot be in the past'}, status=status.HTTP_400_BAD_REQUEST)
         except ValueError:
             return Response({'error': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3894,7 +3898,7 @@ def purchase_featured_package_api(request):
             )
             
             # Mark product as featured if starting today
-            if start_date <= timezone.now().date() <= end_date:
+            if start_date <= timezone.localdate() <= end_date:
                 product.featured = True
                 product.save()
             
@@ -3915,21 +3919,22 @@ def get_product_featured_info_api(request, product_id):
     """Get featured info and check modification rights"""
     try:
         product = Product.objects.get(id=product_id, vendor__user=request.user)
+        sync_featured_products(Product.objects.filter(pk=product.pk))
+        product.refresh_from_db(fields=['featured'])
         
         # Find active purchase
         purchase = ProductFeaturedPurchase.objects.filter(
             product=product,
             is_active=True,
-            end_date__gte=timezone.now().date()
-        ).order_by('-end_date').first()
+            end_date__gte=timezone.localdate()
+        ).order_by('-end_date', '-pk').first()
         
         can_modify = True
         current_purchase = None
         
         if purchase:
-            # Cannot modify (cancel) if already started
-            if purchase.start_date <= timezone.now().date():
-                can_modify = False
+            # Existing packages can move their remaining paid time.
+            can_modify = True
                 
             current_purchase = {
                 'id': purchase.id,
@@ -3940,6 +3945,8 @@ def get_product_featured_info_api(request, product_id):
             
         return Response({
             'can_modify': can_modify,
+            'featured': product.featured,
+            'server_date': timezone.localdate(),
             'current_purchase': current_purchase
         })
         
@@ -3949,43 +3956,22 @@ def get_product_featured_info_api(request, product_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def reschedule_featured_package_api(request, product_id):
-    """Reschedule a featured package start date (if not yet started)"""
+    """Reschedule remaining paid time or feature now, without another charge."""
+    from datetime import date
     try:
-        start_date_str = request.data.get('start_date')
-        if not start_date_str:
-            return Response({'error': 'Start date required'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        from datetime import datetime
-        new_start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        if new_start_date < timezone.now().date():
-             return Response({'error': 'Start date cannot be in the past'}, status=status.HTTP_400_BAD_REQUEST)
-             
-        product = Product.objects.get(id=product_id, vendor__user=request.user)
-        
-        # Find the purchase to reschedule
-        purchase = ProductFeaturedPurchase.objects.filter(
-            product=product,
-            is_active=True,
-            start_date__gt=timezone.now().date()  # Only future ones
-        ).order_by('start_date').first()
-        
-        if not purchase:
-            return Response({'error': 'No rescheduleable package found (may have already started)'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Update dates
-        duration = (purchase.end_date - purchase.start_date).days
-        purchase.start_date = new_start_date
-        purchase.end_date = new_start_date + timedelta(days=duration)
-        purchase.save()
-        
-        return Response({
-            'success': True,
-            'message': 'Package rescheduled',
-            'new_start_date': purchase.start_date,
-            'new_end_date': purchase.end_date
-        })
-        
+        new_start = date.fromisoformat(request.data.get('start_date', ''))
+    except (ValueError, TypeError):
+        return Response({'error': 'A valid start date (YYYY-MM-DD) is required'}, status=400)
+    try:
+        product, purchase = reschedule_paid_feature(product_id, request.user, new_start)
     except Product.DoesNotExist:
-        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Product not found'}, status=404)
+    except ValueError as error:
+        return Response({'error': str(error)}, status=400)
+    return Response({
+        'success': True,
+        'message': 'Featured promotion updated. No additional charge.',
+        'featured': product.featured,
+        'new_start_date': purchase.start_date,
+        'new_end_date': purchase.end_date,
+    })
