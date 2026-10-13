@@ -12,14 +12,13 @@ from django.db.models import Q
 import smtplib
 from rest_framework.pagination import PageNumberPagination
 from django.db import transaction
-import math
 import logging
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 import uuid
 
 logger = logging.getLogger(__name__)
-from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, DeliveryRadius, Slider, FeaturedProductPackage, ProductFeaturedPurchase
+from .models import CustomUser, VendorProfile, VendorDocument, VendorShopImage, Product, ProductImage, VendorWallet, WalletTransaction, UserFavorite, Cart, CartItem, Category, SubCategory, Slider, FeaturedProductPackage, ProductFeaturedPurchase
 from .parameter_models import CategoryParameter, SubCategoryParameter
 from datetime import timedelta
 from .complete_onboarding_view import complete_vendor_onboarding
@@ -725,10 +724,6 @@ class VendorProfileListCreateView(generics.ListCreateAPIView):
         if VendorProfile.objects.filter(user=self.request.user).exists():
             raise drf_serializers.ValidationError({'user': 'Vendor profile already exists.'})
         
-        # Auto-set delivery radius from admin settings
-        default_radius = DeliveryRadius.objects.first()
-        if default_radius:
-            serializer.validated_data['delivery_radius'] = default_radius.radius
         
         # Handle referral code
         referral_code = serializer.validated_data.pop('referral_code', None)
@@ -1480,25 +1475,6 @@ class SearchPagination(PageNumberPagination):
             })
         return super().get_paginated_response(data)
 
-def calculate_distance(lat1, lon1, lat2, lon2):
-    """Google Maps precision Haversine formula with higher precision"""
-    # Convert to float with full precision
-    lat1, lon1, lat2, lon2 = float(lat1), float(lon1), float(lat2), float(lon2)
-    
-    R = 6371000  # Earth's radius in meters for higher precision
-    
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    lat1_rad = math.radians(lat1)
-    lat2_rad = math.radians(lat2)
-    
-    a = (math.sin(dlat / 2) ** 2 + 
-         math.cos(lat1_rad) * math.cos(lat2_rad) * 
-         math.sin(dlon / 2) ** 2)
-    
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return (R * c) / 1000  # Convert back to km
-
 class CustomerProductSearchView(generics.ListAPIView):
     serializer_class = CustomerProductSerializer
     permission_classes = [permissions.AllowAny]
@@ -1548,48 +1524,6 @@ class CustomerProductSearchView(generics.ListAPIView):
             search_count = queryset.count()
             print(f"After search filter: {search_count} products")
         
-        # Location-based filtering
-        user_lat = self.request.query_params.get('latitude')
-        user_lon = self.request.query_params.get('longitude')
-        
-        if user_lat and user_lon:
-            try:
-                user_lat = float(user_lat)
-                user_lon = float(user_lon)
-                print(f"User location: ({user_lat}, {user_lon})")
-                
-                # Filter products by vendor delivery radius
-                filtered_products = []
-                total_checked = 0
-                within_radius = 0
-                
-                for product in queryset:
-                    vendor = product.vendor
-                    total_checked += 1
-                    
-                    if vendor.latitude and vendor.longitude and vendor.delivery_radius:
-                        distance = calculate_distance(
-                            user_lat, user_lon,
-                            vendor.latitude, vendor.longitude
-                        )
-                        print(f"Vendor '{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
-                        
-                        if distance <= vendor.delivery_radius:
-                            filtered_products.append(product.id)
-                            within_radius += 1
-                            print(f"  INCLUDED: Product '{product.name}'")
-                        else:
-                            print(f"  EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
-                    else:
-                        print(f"Vendor '{vendor.business_name}': Missing location/radius data")
-                
-                print(f"Location filtering: {within_radius}/{total_checked} products within delivery radius")
-                queryset = queryset.filter(id__in=filtered_products)
-            except (ValueError, TypeError) as e:
-                print(f"Location parsing error: {e}")
-        else:
-            print("No user location provided - skipping distance filtering")
-        
         final_count = queryset.count()
         print(f"Final result: {final_count} products")
         print("PRODUCT SEARCH DEBUG - Complete\n")
@@ -1638,47 +1572,6 @@ class CustomerVendorSearchView(generics.ListAPIView):
             )
             search_count = queryset.count()
             print(f"After search filter: {search_count} vendors")
-        
-        # Location-based filtering
-        user_lat = self.request.query_params.get('latitude')
-        user_lon = self.request.query_params.get('longitude')
-        
-        if user_lat and user_lon:
-            try:
-                user_lat = float(user_lat)
-                user_lon = float(user_lon)
-                print(f"User location: ({user_lat}, {user_lon})")
-                
-                # Filter vendors by delivery radius
-                filtered_vendors = []
-                total_checked = 0
-                within_radius = 0
-                
-                for vendor in queryset:
-                    total_checked += 1
-                    
-                    if vendor.latitude and vendor.longitude and vendor.delivery_radius:
-                        distance = calculate_distance(
-                            user_lat, user_lon,
-                            vendor.latitude, vendor.longitude
-                        )
-                        print(f"'{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
-                        
-                        if distance <= vendor.delivery_radius:
-                            filtered_vendors.append(vendor.id)
-                            within_radius += 1
-                            print(f"  INCLUDED: Within delivery range")
-                        else:
-                            print(f"  EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
-                    else:
-                        print(f"'{vendor.business_name}': Missing location/radius data")
-                
-                print(f"Location filtering: {within_radius}/{total_checked} vendors within delivery radius")
-                queryset = queryset.filter(id__in=filtered_vendors)
-            except (ValueError, TypeError) as e:
-                print(f"Location parsing error: {e}")
-        else:
-            print("No user location provided - skipping distance filtering")
         
         final_count = queryset.count()
         print(f"Final result: {final_count} vendors")
@@ -2061,15 +1954,6 @@ def get_category_parameters_compat_api(request):
         return Response({'parameters': params_data})
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-@api_view(['GET'])
-@permission_classes([permissions.AllowAny])
-def get_delivery_radius_api(request):
-    # Get the first (smallest) delivery radius as default
-    radius = DeliveryRadius.objects.first()
-    return Response({
-        'delivery_radius': radius.radius if radius else 5.0
-    })
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -3176,33 +3060,6 @@ def image_search_api(request):
         
         queryset = queryset.filter(id__in=online_vendors)
         
-        # Location-based filtering
-        user_lat = request.POST.get('latitude')
-        user_lon = request.POST.get('longitude')
-        
-        if user_lat and user_lon:
-            try:
-                user_lat = float(user_lat)
-                user_lon = float(user_lon)
-                
-                # Filter products by vendor delivery radius
-                filtered_products = []
-                for product in queryset:
-                    vendor = product.vendor
-                    
-                    if vendor.latitude and vendor.longitude and vendor.delivery_radius:
-                        distance = calculate_distance(
-                            user_lat, user_lon,
-                            vendor.latitude, vendor.longitude
-                        )
-                        
-                        if distance <= vendor.delivery_radius:
-                            filtered_products.append(product.id)
-                
-                queryset = queryset.filter(id__in=filtered_products)
-            except (ValueError, TypeError):
-                pass
-        
         # For demo purposes, return first 10 products
         # In real implementation, use image recognition AI to find similar products
         results = queryset[:10]
@@ -3227,7 +3084,7 @@ def image_search_api(request):
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def search_products_api(request):
-    """Search products with location-based filtering"""
+    """Search products from approved online vendors, regardless of location"""
     sync_featured_products()
     print("\nPRODUCT SEARCH API DEBUG - Starting query")
     print(f"Query params: {dict(request.query_params)}")
@@ -3271,48 +3128,6 @@ def search_products_api(request):
         )
         search_count = queryset.count()
         print(f"After search filter: {search_count} products")
-
-    # Location-based filtering
-    user_lat = request.query_params.get('latitude')
-    user_lon = request.query_params.get('longitude')
-
-    if user_lat and user_lon:
-        try:
-            user_lat = float(user_lat)
-            user_lon = float(user_lon)
-            print(f"User location: ({user_lat}, {user_lon})")
-
-            # Filter products by vendor delivery radius
-            filtered_products = []
-            total_checked = 0
-            within_radius = 0
-
-            for product in queryset:
-                vendor = product.vendor
-                total_checked += 1
-
-                if vendor.latitude and vendor.longitude and vendor.delivery_radius:
-                    distance = calculate_distance(
-                        user_lat, user_lon,
-                        vendor.latitude, vendor.longitude
-                    )
-                    print(f"Vendor '{vendor.business_name}': distance={distance:.2f}km, radius={vendor.delivery_radius}km")
-
-                    if distance <= vendor.delivery_radius:
-                        filtered_products.append(product.id)
-                        within_radius += 1
-                        print(f"  INCLUDED: Product '{product.name}'")
-                    else:
-                        print(f"  EXCLUDED: Too far ({distance:.2f}km > {vendor.delivery_radius}km)")
-                else:
-                    print(f"Vendor '{vendor.business_name}': Missing location/radius data")
-
-            print(f"Location filtering: {within_radius}/{total_checked} products within delivery radius")
-            queryset = queryset.filter(id__in=filtered_products)
-        except (ValueError, TypeError) as e:
-            print(f"Location parsing error: {e}")
-    else:
-        print("No user location provided - skipping distance filtering")
 
     final_count = queryset.count()
     print(f"Final result: {final_count} products")

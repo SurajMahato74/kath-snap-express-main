@@ -15,7 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import json
-from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, DeliveryRadius, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification, VendorDocument, VendorShopImage
+from .models import CustomUser, VendorProfile, CommissionRange, VendorWallet, WalletTransaction, Category, SubCategory, InitialWalletPoints, ChargeRate, FeaturedProductPackage, Slider, PushNotification, VendorDocument, VendorShopImage
 from .parameter_models import CategoryParameter, SubCategoryParameter
 from .message_models import Conversation, Message, MessageRead
 from .order_models import Order, OrderItem, PaymentTransaction
@@ -738,42 +738,6 @@ def manage_categories(request):
         'categories': categories,
     }
     return render(request, 'accounts/manage_categories.html', context)
-
-@login_required
-def manage_delivery_radius(request):
-    if not request.user.is_superuser:
-        messages.error(request, 'Access denied.')
-        return redirect('login')
-    
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        
-        if action == 'add':
-            radius = request.POST.get('radius')
-            if radius:
-                try:
-                    DeliveryRadius.objects.create(radius=float(radius))
-                    messages.success(request, 'Delivery radius added successfully!')
-                except Exception as e:
-                    messages.error(request, f'Error adding delivery radius: {str(e)}')
-            else:
-                messages.error(request, 'Radius value is required.')
-        
-        elif action == 'delete':
-            radius_id = request.POST.get('radius_id')
-            try:
-                DeliveryRadius.objects.get(id=radius_id).delete()
-                messages.success(request, 'Delivery radius deleted successfully!')
-            except DeliveryRadius.DoesNotExist:
-                messages.error(request, 'Delivery radius not found.')
-        
-        return redirect('manage_delivery_radius')
-    
-    delivery_radii = DeliveryRadius.objects.all().order_by('radius')
-    context = {
-        'delivery_radii': delivery_radii,
-    }
-    return render(request, 'accounts/manage_delivery_radius.html', context)
 
 @login_required
 def manage_initial_wallet_points(request):

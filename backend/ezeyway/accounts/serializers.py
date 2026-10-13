@@ -174,7 +174,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'latitude', 'longitude', 'business_type', 'categories', 'description',
             'business_license', 'business_license_file', 'business_license_file_url', 'gst_number', 'gst_certificate', 'gst_certificate_url',
             'pan_number', 'fssai_license', 'fssai_license_url', 'bank_name', 'account_holder_name',
-            'account_number', 'ifsc_code', 'bank_document', 'bank_document_url', 'delivery_radius',
+            'account_number', 'ifsc_code', 'bank_document', 'bank_document_url',
             'min_order_amount', 'is_approved', 'approval_date', 'is_rejected', 'rejection_reason', 'rejection_date', 'additional_docs',
             'established_year', 'employee_count', 'website', 'facebook', 'instagram', 'twitter',
             'delivery_fee', 'free_delivery_above', 'estimated_delivery_time', 'delivery_slots',
@@ -350,9 +350,6 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             if not isinstance(attrs['categories'], list):
                 raise serializers.ValidationError({'categories': 'Categories must be a list.'})
 
-        if 'delivery_radius' in attrs and attrs['delivery_radius'] is not None:
-            if attrs['delivery_radius'] < 0:
-                raise serializers.ValidationError({'delivery_radius': 'Delivery radius cannot be negative.'})
         if 'min_order_amount' in attrs and attrs['min_order_amount'] is not None:
             if attrs['min_order_amount'] < 0:
                 raise serializers.ValidationError({'min_order_amount': 'Minimum order amount cannot be negative.'})

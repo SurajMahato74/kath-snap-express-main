@@ -244,11 +244,6 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'manage_delivery_radius' %}active{% endif %}" href="{% url 'manage_delivery_radius' %}">
-                                <i class="fas fa-map-marker-alt me-2"></i>Set Radius
-                            </a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.url_name == 'manage_initial_wallet_points' %}active{% endif %}" href="{% url 'manage_initial_wallet_points' %}">
                                 <i class="fas fa-wallet me-2"></i><span class="d-none d-lg-inline">Set Initial </span>Points
                             </a>

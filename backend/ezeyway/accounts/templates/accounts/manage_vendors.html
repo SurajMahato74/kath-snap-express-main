@@ -368,7 +368,6 @@
                         <div class="col-md-6">
                             <h6 class="text-primary mb-3">Business Settings</h6>
                             <table class="table table-sm">
-                                <tr><td><strong>Delivery Radius:</strong></td><td>${vendor.delivery_radius ? vendor.delivery_radius + ' km' : 'N/A'}</td></tr>
                                 <tr><td><strong>Min Order Amount:</strong></td><td>${vendor.min_order_amount ? '₹' + vendor.min_order_amount : 'N/A'}</td></tr>
                                 <tr><td><strong>Status:</strong></td><td><span class="badge ${vendor.is_approved ? 'bg-success' : 'bg-warning'}">${vendor.is_approved ? 'Approved' : 'Pending'}</span></td></tr>
                                 <tr><td><strong>Applied Date:</strong></td><td>${vendor.user ? new Date(vendor.user.date_joined).toLocaleDateString() : 'N/A'}</td></tr>

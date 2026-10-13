@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.core.files.storage import default_storage
 import os
 import json
-from .models import VendorProfile, VendorDocument, VendorShopImage, DeliveryRadius
+from .models import VendorProfile, VendorDocument, VendorShopImage
 from .serializers import VendorProfileSerializer
 from .email_notifications import send_vendor_submission_email
 
@@ -46,14 +46,9 @@ def complete_vendor_onboarding(request):
             'ifsc_code': request.data.get('ifsc_code', ''),
             'gst_number': request.data.get('gst_number', ''),
             'pan_number': request.data.get('pan_number', ''),
-            'delivery_radius': request.data.get('delivery_radius', ''),
             'min_order_amount': request.data.get('min_order_amount', ''),
         }
         
-        # Auto-set delivery radius from admin settings
-        default_radius = DeliveryRadius.objects.first()
-        if default_radius:
-            profile_data['delivery_radius'] = default_radius.radius
         
         # Handle business license file
         if 'business_license_file' in request.FILES:

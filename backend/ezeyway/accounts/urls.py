@@ -38,7 +38,6 @@ urlpatterns = [
     path('superadmin/analytics/', views.analytics_dashboard, name='analytics_dashboard'),
     path('superadmin/commission-ranges/', views.manage_commission_ranges, name='manage_commission_ranges'),
     path('superadmin/categories/', views.manage_categories, name='manage_categories'),
-    path('superadmin/delivery-radius/', views.manage_delivery_radius, name='manage_delivery_radius'),
     path('superadmin/initial-wallet-points/', views.manage_initial_wallet_points, name='manage_initial_wallet_points'),
     path('superadmin/featured-packages/', views.manage_featured_packages, name='manage_featured_packages'),
     path('superadmin/sliders/', views.manage_sliders, name='manage_sliders'),

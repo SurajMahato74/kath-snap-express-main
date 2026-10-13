@@ -142,7 +142,6 @@ class VendorProfile(models.Model):
     account_number = models.CharField(max_length=50, blank=True, null=True)
     ifsc_code = models.CharField(max_length=20, blank=True, null=True)
     bank_document = models.CharField(max_length=500, blank=True, null=True)
-    delivery_radius = models.FloatField(blank=True, null=True)
     min_order_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     established_year = models.CharField(max_length=4, blank=True, null=True)
     employee_count = models.CharField(max_length=20, blank=True, null=True)
@@ -569,18 +568,6 @@ class SubCategory(models.Model):
     
     def __str__(self):
         return f"{self.category.name} > {self.name}"
-
-class DeliveryRadius(models.Model):
-    radius = models.FloatField(help_text="Delivery radius in kilometers")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name_plural = "Delivery Radii"
-        ordering = ['radius']
-    
-    def __str__(self):
-        return f"{self.radius} km"
 
 class InitialWalletPoints(models.Model):
     points = models.DecimalField(max_digits=10, decimal_places=2, help_text="Initial wallet points for new vendors")
